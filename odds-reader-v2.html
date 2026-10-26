@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#7c3aed">
+<title>Odds Reader</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://js.paystack.co/v1/inline.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#f6f3ff;color:#1c1233;padding-bottom:5.5rem}
+  .hero{background:linear-gradient(135deg,#6d28d9,#a855f7)}
+  .card{background:#fff;border:1px solid #e6defa;border-radius:1.25rem;padding:1rem}
+  .btn{background:linear-gradient(90deg,#7c3aed,#4f46e5);color:#fff;font-weight:800;border-radius:.9rem}
+  .btn:disabled{opacity:.4}
+  .btn:active{transform:scale(.98)}
+  .ghost{background:#f1ecfd;color:#5b21b6;font-weight:600;border-radius:.9rem}
+  .cell{width:100%;background:#f6f3ff;border:1px solid #ddd1fa;border-radius:.5rem;padding:.45rem;text-align:center}
+  .field{width:100%;background:#f6f3ff;border:1px solid #ddd1fa;border-radius:.75rem;padding:.7rem}
+  .tab{display:none}.tab.on{display:block}
+  nav button.on{color:#7c3aed;font-weight:800}
+  .bar>div{height:100%;transition:width .5s ease}
+  summary{cursor:pointer;font-weight:600}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="px-4 pt-5 max-w-md mx-auto">
+  <div class="text-xs text-purple-700">Welcome</div>
+  <div id="hello" class="font-extrabold text-xl">Odds Reader</div>
+</header>
+
+<main class="max-w-md mx-auto px-4 mt-3">
+
+<!-- HOME -->
+<section id="t-home" class="tab on space-y-3">
+  <div class="hero rounded-3xl p-4 text-white">
+    <div class="text-xs opacity-80">Scan credits</div>
+    <div class="flex justify-between items-center">
+      <div class="text-4xl font-extrabold"><span id="bal">0</span></div>
+      <button data-go="packages" class="bg-black rounded-full px-4 py-2 text-sm font-bold">Get credits +</button>
+    </div>
+    <div class="text-xs opacity-80 mt-1">1 credit = 1 screenshot read</div>
+  </div>
+  <div class="grid grid-cols-2 gap-3 text-center">
+    <div class="card"><div class="text-2xl font-extrabold" id="scanCount">0</div><div class="text-xs text-gray-500">Saved scans</div></div>
+    <div class="card"><div class="text-2xl font-extrabold">1X2</div><div class="text-xs text-gray-500">Odds format read</div></div>
+  </div>
+  <button data-go="predictions" class="card w-full text-left">
+    <div class="font-extrabold">Read an odds screenshot</div>
+    <div class="text-sm text-gray-600">Upload a screenshot from your games lobby. See the probabilities and margin built into the odds.</div>
+  </button>
+  <button data-go="guide" class="card w-full text-left">
+    <div class="font-extrabold">How it works</div>
+    <div class="text-sm text-gray-600">Four steps, and what the numbers mean.</div>
+  </button>
+  <div class="card text-xs text-amber-900 bg-amber-50 border-amber-200">Virtual football results are random. Picks here follow the odds and can lose. 18+ only. Stake only what you can afford to lose.</div>
+</section>
+
+<!-- PACKAGES -->
+<section id="t-packages" class="tab space-y-3">
+  <h2 class="text-xl font-extrabold">Scan credit packages</h2>
+  <p class="text-sm text-gray-600">Credits pay for reading screenshots. They do not buy winning picks.</p>
+  <div id="packs" class="space-y-3"></div>
+  <p id="walletMsg" class="text-xs text-purple-700"></p>
+</section>
+
+<!-- PREDICTIONS -->
+<section id="t-predictions" class="tab space-y-3">
+  <div class="card">
+    <h2 class="font-extrabold text-lg">Upload match screenshot</h2>
+    <p class="text-xs text-gray-500">PNG, JPG, WEBP or HEIC</p>
+    <label for="file" class="block mt-3 text-center rounded-2xl border-2 border-dashed border-purple-300 py-8 cursor-pointer bg-purple-50">
+      <span id="dropText" class="font-semibold text-purple-800">Tap to select a screenshot</span>
+    </label>
+    <input id="file" type="file" accept="image/*,.heic,.heif" class="hidden">
+    <img id="preview" class="hidden rounded-xl mt-3 max-h-56 mx-auto" alt="Selected screenshot">
+    <button id="scan" class="btn w-full py-3 mt-3" disabled>Read odds (1 credit)</button>
+    <div id="progressWrap" class="hidden mt-3">
+      <div class="bar h-2 rounded-full bg-purple-100 overflow-hidden"><div id="progress" class="bg-purple-500" style="width:0%"></div></div>
+      <p id="status" class="text-xs text-gray-600 mt-1"></p>
+    </div>
+    <p id="scanMsg" class="text-xs text-purple-700 mt-2"></p>
+  </div>
+
+  <div id="editor" class="hidden card">
+    <h3 class="font-extrabold">Check what was read</h3>
+    <p class="text-xs text-gray-500 mb-2">Fix any misread digit. Columns: home, away, 1, X, 2.</p>
+    <div id="rows" class="space-y-2"></div>
+    <div class="flex gap-2 mt-3">
+      <button id="addRow" class="ghost py-2 px-4 text-sm">Add match</button>
+      <button id="analyze" class="btn py-2 flex-1">Update results</button>
+    </div>
+  </div>
+
+  <div id="results" class="space-y-3"></div>
+</section>
+
+<!-- GUIDE -->
+<section id="t-guide" class="tab space-y-3">
+  <h2 class="text-xl font-extrabold">How to use Odds Reader</h2>
+  <div class="card"><b>Open your games lobby.</b><div class="text-sm text-gray-600">Go to the 1X2 odds screen for the round.</div></div>
+  <div class="card"><b>Take a screenshot.</b><div class="text-sm text-gray-600">Capture all the matches and odds in one clear image.</div></div>
+  <div class="card"><b>Upload it in Predictions.</b><div class="text-sm text-gray-600">The app reads team codes and odds. Fix any digit it got wrong.</div></div>
+  <div class="card"><b>Read the numbers, then decide.</b><div class="text-sm text-gray-600">You see the probability each outcome carries, the bookmaker's margin and a suggested slip. The choice and the risk are yours.</div></div>
+  <div class="card bg-purple-50">
+    <b>Good to know</b>
+    <div class="text-sm text-gray-700 mt-1">Adding more picks to one slip lowers the chance that every pick wins. The slip card shows that chance so you can see it.</div>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section id="t-about" class="tab space-y-3">
+  <h2 class="text-xl font-extrabold">About Odds Reader</h2>
+  <div class="card text-sm text-gray-700">Odds Reader is a tool that reads an odds screenshot and turns the prices into probabilities. It removes the bookmaker's margin to show fair odds and points to the outcome the market rates as most likely.</div>
+  <div class="card text-sm text-gray-700"><b>What it cannot do.</b> It cannot know the result of a virtual match. Those results come from a random number generator, so any pick can lose.</div>
+  <div class="card">
+    <h3 class="font-extrabold mb-2">Questions</h3>
+    <details class="mb-2"><summary>How are the picks made?</summary><p class="text-sm text-gray-600 mt-1">The app converts each odd to a probability, removes the margin, and ranks the outcomes. The top one is the pick.</p></details>
+    <details class="mb-2"><summary>Are results guaranteed?</summary><p class="text-sm text-gray-600 mt-1">No. Nothing is guaranteed and you can lose money.</p></details>
+    <details><summary>Why do scans cost credits?</summary><p class="text-sm text-gray-600 mt-1">Credits cover hosting and running the service.</p></details>
+  </div>
+  <div class="card text-xs text-amber-900 bg-amber-50 border-amber-200"><b>Responsible gaming.</b> 18+ only. Never stake more than you can afford to lose. If gambling is causing you harm, stop and talk to someone you trust.</div>
+</section>
+
+<!-- PROFILE -->
+<section id="t-profile" class="tab space-y-3">
+  <div id="authOut" class="card">
+    <h2 class="font-extrabold text-lg">Log in or create an account</h2>
+    <input id="email" type="email" autocomplete="email" placeholder="Email" class="field mt-3">
+    <input id="pw" type="password" autocomplete="current-password" placeholder="Password (6+ characters)" class="field mt-2">
+    <div class="flex gap-2 mt-3">
+      <button id="login" class="btn py-2 flex-1">Log in</button>
+      <button id="signup" class="ghost py-2 flex-1">Sign up</button>
+    </div>
+  </div>
+  <div id="authIn" class="hidden card">
+    <div class="text-xs text-gray-500">Signed in as</div>
+    <div id="who" class="font-extrabold"></div>
+    <div class="text-sm mt-2">Credits: <b id="bal2">0</b></div>
+    <button id="logout" class="w-full mt-3 py-2 rounded-xl bg-red-50 text-red-700 font-semibold">Sign out</button>
+  </div>
+  <p id="authMsg" class="text-xs text-purple-700"></p>
+  <div id="historyWrap" class="hidden">
+    <div class="flex justify-between items-center">
+      <h3 class="font-extrabold">Saved scans</h3>
+      <button id="clearHist" class="text-xs text-purple-700 underline">Clear</button>
+    </div>
+    <div id="history" class="space-y-2 mt-2"></div>
+  </div>
+</section>
+
+</main>
+
+<nav class="fixed bottom-0 inset-x-0 bg-white border-t border-purple-100">
+  <div class="max-w-md mx-auto grid grid-cols-6 text-[11px] text-gray-500">
+    <button data-go="home" class="py-2 on">🏠<br>Home</button>
+    <button data-go="packages" class="py-2">📦<br>Packages</button>
+    <button data-go="predictions" class="py-2">🧠<br>Predictions</button>
+    <button data-go="guide" class="py-2">📖<br>Guide</button>
+    <button data-go="about" class="py-2">ℹ️<br>About</button>
+    <button data-go="profile" class="py-2">👤<br>Profile</button>
+  </div>
+</nav>
+
+<script>
+const $ = id => document.getElementById(id);
+let imgFile = null, matches = [], user = null, balance = 0;
+
+/* ---------- Tabs ---------- */
+function go(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.id === 't-' + name));
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.go === name));
+  scrollTo({ top: 0 });
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
+
+/* ---------- Accounts + credits (Supabase) ---------- */
+const SUPABASE_URL = 'PASTE_PROJECT_URL';
+const SUPABASE_ANON_KEY = 'PASTE_ANON_KEY';
+const configured = !SUPABASE_URL.startsWith('PASTE');
+const sb = configured ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+const PACKS = [
+  { name: 'Starter', credits: 5, ghs: 5 },
+  { name: 'Popular', credits: 15, ghs: 12 },
+  { name: 'Mega', credits: 40, ghs: 25 }
+];
+$('packs').innerHTML = PACKS.map((p, i) => `
+  <button data-p="${i}" class="card w-full flex justify-between items-center text-left ${i === 1 ? 'border-purple-400' : ''}">
+    <div><div class="font-extrabold">${p.name}</div><div class="text-xs text-gray-500">${p.credits} screenshot reads</div></div>
+    <div class="bg-gray-900 text-white rounded-full px-4 py-2 text-sm font-bold">GHS ${p.ghs}</div>
+  </button>`).join('');
+const PAYSTACK_PUBLIC_KEY = 'pk_test_PASTE_YOUR_PUBLIC_KEY';
+$('packs').addEventListener('click', e => {
+  const b = e.target.closest('[data-p]'); if (!b) return;
+  if (!user) { $('walletMsg').textContent = 'Log in from the Profile tab first.'; return; }
+  if (PAYSTACK_PUBLIC_KEY.includes('PASTE')) { $('walletMsg').textContent = 'Add your Paystack public key in the code.'; return; }
+  const p = PACKS[b.dataset.p];
+  PaystackPop.setup({
+    key: PAYSTACK_PUBLIC_KEY,
+    email: user.email,
+    amount: p.ghs * 100,
+    currency: 'GHS',
+    ref: 'OR-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+    metadata: { user_id: user.id },
+    callback: function () { $('walletMsg').textContent = 'Payment received. Adding your credits...'; waitForCredits(balance); },
+    onClose: function () {}
+  }).openIframe();
+});
+async function waitForCredits(before) {
+  for (let i = 0; i < 15; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    await refreshBalance();
+    if (balance > before) { $('walletMsg').textContent = 'Credits added.'; return; }
+  }
+  $('walletMsg').textContent = 'Still confirming. Pull to refresh in a minute. If credits do not appear, contact support with your payment reference.';
+}
+
+function setBal(n) { balance = n; $('bal').textContent = n; $('bal2').textContent = n; }
+async function refreshBalance() {
+  let n = 0;
+  if (user) {
+    const { data } = await sb.from('wallets').select('tokens').eq('user_id', user.id).maybeSingle();
+    n = data?.tokens ?? 0;
+  }
+  setBal(n);
+}
+async function onUser(u) {
+  user = u;
+  $('authOut').classList.toggle('hidden', !!u);
+  $('authIn').classList.toggle('hidden', !u);
+  $('who').textContent = u?.email || '';
+  $('hello').textContent = u ? u.email.split('@')[0] : 'Odds Reader';
+  await refreshBalance();
+}
+if (!configured) {
+  $('authMsg').textContent = 'Add your Supabase URL and anon key in the code to turn on accounts.';
+} else {
+  sb.auth.onAuthStateChange((_e, s) => onUser(s?.user || null));
+  sb.auth.getSession().then(({ data }) => onUser(data.session?.user || null));
+  $('signup').onclick = async () => {
+    const { error } = await sb.auth.signUp({ email: $('email').value.trim(), password: $('pw').value });
+    $('authMsg').textContent = error ? error.message : 'Account created. If email confirmation is on, confirm your email, then log in.';
+  };
+  $('login').onclick = async () => {
+    const { error } = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('pw').value });
+    $('authMsg').textContent = error ? error.message : '';
+  };
+  $('logout').onclick = () => sb.auth.signOut();
+}
+
+/* ---------- Image selection (HEIC supported) ---------- */
+$('file').addEventListener('change', async e => {
+  let f = e.target.files[0];
+  if (!f) return;
+  $('progressWrap').classList.remove('hidden');
+  try {
+    if (/heic|heif/i.test(f.type) || /\.(heic|heif)$/i.test(f.name)) {
+      $('status').textContent = 'Converting HEIC image...';
+      const out = await heic2any({ blob: f, toType: 'image/jpeg', quality: 0.92 });
+      f = new File([Array.isArray(out) ? out[0] : out], 'screenshot.jpg', { type: 'image/jpeg' });
+    }
+    await new Promise((ok, no) => { const t = new Image(); t.onload = ok; t.onerror = () => no(); t.src = URL.createObjectURL(f); });
+  } catch {
+    $('status').textContent = 'This file could not be opened. Save it as JPG or PNG and try again.';
+    $('scan').disabled = true;
+    return;
+  }
+  imgFile = f;
+  $('status').textContent = '';
+  $('preview').src = URL.createObjectURL(f);
+  $('preview').classList.remove('hidden');
+  $('dropText').textContent = f.name;
+  $('scan').disabled = false;
+});
+
+function preprocess(file) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const s = 2, c = document.createElement('canvas');
+      c.width = img.width * s; c.height = img.height * s;
+      const x = c.getContext('2d');
+      x.drawImage(img, 0, 0, c.width, c.height);
+      const d = x.getImageData(0, 0, c.width, c.height), p = d.data;
+      for (let i = 0; i < p.length; i += 4) {
+        let g = 0.3 * p[i] + 0.59 * p[i + 1] + 0.11 * p[i + 2];
+        g = g > 150 ? 255 : g < 90 ? 0 : g;
+        p[i] = p[i + 1] = p[i + 2] = g;
+      }
+      x.putImageData(d, 0, 0);
+      c.toBlob(res, 'image/png');
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/* ---------- OCR ---------- */
+$('scan').addEventListener('click', async () => {
+  if (!user) { $('scanMsg').textContent = 'Log in from the Profile tab to read screenshots.'; return; }
+  if (balance < 1) { $('scanMsg').textContent = 'You need at least 1 credit. See the Packages tab.'; return; }
+  $('scanMsg').textContent = '';
+  $('scan').disabled = true;
+  $('progressWrap').classList.remove('hidden');
+  try {
+    const blob = await preprocess(imgFile);
+    const { data } = await Tesseract.recognize(blob, 'eng', {
+      logger: m => {
+        if (m.status) $('status').textContent = m.status;
+        if (m.progress != null) $('progress').style.width = Math.round(m.progress * 100) + '%';
+      }
+    });
+    matches = parse(data.text);
+    if (matches.length) {
+      const { data: left, error } = await sb.rpc('use_token');
+      if (!error) setBal(left);
+      $('status').textContent = `Found ${matches.length} match${matches.length > 1 ? 'es' : ''}. Check the values below.`;
+    } else {
+      $('status').textContent = 'No odds found. Try a sharper, full-width screenshot, or add matches by hand.';
+      matches = [{ h: '', a: '', o: ['', '', ''] }];
+    }
+    renderEditor();
+    saveHistory();
+  } catch {
+    $('status').textContent = 'Could not read the image. Check your connection and try again.';
+  }
+  $('scan').disabled = false;
+});
+
+function parse(text) {
+  const teams = [...text.matchAll(/\b([A-Z]{3})\s*(?:vs|v5|ys|v)\s*([A-Z]{3})\b/gi)].map(m => [m[1].toUpperCase(), m[2].toUpperCase()]);
+  const nums = [...text.matchAll(/\b(\d{1,2})[.,](\d{2})\b/g)].map(m => parseFloat(m[1] + '.' + m[2])).filter(n => n >= 1.01 && n <= 99);
+  const out = [], count = Math.max(teams.length, Math.floor(nums.length / 3));
+  for (let i = 0; i < count; i++) out.push({ h: teams[i]?.[0] || '', a: teams[i]?.[1] || '', o: [nums[i * 3], nums[i * 3 + 1], nums[i * 3 + 2]].map(v => v ?? '') });
+  return out;
+}
+
+/* ---------- Editor ---------- */
+function renderEditor() {
+  $('editor').classList.remove('hidden');
+  $('rows').innerHTML = matches.map((m, i) => `
+    <div class="grid grid-cols-5 gap-1" data-i="${i}">
+      <input class="cell" data-f="h" value="${m.h}" placeholder="Home" aria-label="Home team">
+      <input class="cell" data-f="a" value="${m.a}" placeholder="Away" aria-label="Away team">
+      <input class="cell" data-f="0" inputmode="decimal" value="${m.o[0]}" placeholder="1" aria-label="Home odds">
+      <input class="cell" data-f="1" inputmode="decimal" value="${m.o[1]}" placeholder="X" aria-label="Draw odds">
+      <input class="cell" data-f="2" inputmode="decimal" value="${m.o[2]}" placeholder="2" aria-label="Away odds">
+    </div>`).join('');
+  analyze();
+}
+function readRows() {
+  matches = [...document.querySelectorAll('#rows [data-i]')].map(r => {
+    const g = f => r.querySelector(`[data-f="${f}"]`).value.trim();
+    return { h: g('h').toUpperCase(), a: g('a').toUpperCase(), o: [g(0), g(1), g(2)].map(v => v.replace(',', '.')) };
+  });
+}
+$('addRow').onclick = () => { readRows(); matches.push({ h: '', a: '', o: ['', '', ''] }); renderEditor(); };
+$('analyze').onclick = () => analyze();
+
+/* ---------- Maths ---------- */
+function calc(o) {
+  const n = o.map(Number);
+  if (n.some(v => !(v > 1))) return null;
+  const raw = n.map(v => 1 / v), sum = raw.reduce((a, b) => a + b, 0);
+  const p = raw.map(v => v / sum);
+  return { p, margin: (sum - 1) * 100, fair: p.map(v => 1 / v) };
+}
+const LABELS = ['Home win', 'Draw', 'Away win'];
+const DC = ['Home or draw (1X)', 'Draw or away (X2)', 'Home or away (12)'];
+const level = p => p >= 0.55 ? 'Strong lean' : p >= 0.42 ? 'Moderate lean' : 'Weak lean';
+
+function pickBlock(c, top) {
+  const dc = [c.p[0] + c.p[1], c.p[1] + c.p[2], c.p[0] + c.p[2]];
+  const bi = dc.indexOf(Math.max(...dc));
+  return `
+    <div class="rounded-xl bg-purple-50 p-3 mt-3 text-sm">
+      <div class="flex justify-between"><span class="font-bold">Pick: ${LABELS[top]}</span><span class="text-purple-700">${level(c.p[top])}</span></div>
+      <div class="text-xs text-gray-600 mt-1">Safer cover: ${DC[bi]}, about ${(dc[bi] * 100).toFixed(0)}% by the odds.</div>
+      <div class="text-xs text-gray-500 mt-1">Picks follow the odds only. Results are random and any pick can lose.</div>
+    </div>`;
+}
+function slipBlock() {
+  const rows = matches.map(m => {
+    const c = calc(m.o); if (!c) return null;
+    const i = c.p.indexOf(Math.max(...c.p));
+    return { name: `${m.h || 'Home'} vs ${m.a || 'Away'}`, i, p: c.p[i], odd: Number(m.o[i]) };
+  }).filter(Boolean).sort((a, b) => b.p - a.p).slice(0, 3);
+  if (!rows.length) return '';
+  const odds = rows.reduce((a, r) => a * r.odd, 1), prob = rows.reduce((a, r) => a * r.p, 1);
+  return `
+    <article class="card border-purple-300">
+      <h3 class="font-extrabold">Suggested slip</h3>
+      <p class="text-xs text-gray-500">Your ${rows.length} highest-probability picks from this scan.</p>
+      <ul class="mt-2 space-y-1 text-sm">${rows.map(r => `<li class="flex justify-between"><span>${r.name}: ${LABELS[r.i]}</span><b>${r.odd.toFixed(2)}</b></li>`).join('')}</ul>
+      <div class="flex justify-between mt-3 text-sm border-t pt-2"><span>Combined odds <b>${odds.toFixed(2)}</b></span><span>Chance all win <b>${(prob * 100).toFixed(1)}%</b></span></div>
+    </article>`;
+}
+function analyze() {
+  if (document.querySelector('#rows [data-i]')) readRows();
+  const html = matches.map(m => {
+    const c = calc(m.o); if (!c) return '';
+    const top = c.p.indexOf(Math.max(...c.p));
+    return `
+    <article class="card">
+      <div class="flex justify-between items-baseline">
+        <h3 class="font-extrabold">${m.h || 'Home'} vs ${m.a || 'Away'}</h3>
+        <span class="text-xs text-gray-500">Margin ${c.margin.toFixed(1)}%</span>
+      </div>
+      <div class="bar flex h-3 rounded-full overflow-hidden mt-3 bg-purple-100">
+        <div style="width:${c.p[0] * 100}%;background:#8b5cf6"></div>
+        <div style="width:${c.p[1] * 100}%;background:#ddd6fe"></div>
+        <div style="width:${c.p[2] * 100}%;background:#4f46e5"></div>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center mt-3 text-xs">
+        ${c.p.map((p, i) => `<div class="rounded-lg py-2 ${i === top ? 'bg-purple-100' : 'bg-gray-50'}"><div class="text-gray-500">${LABELS[i]}</div><div class="font-extrabold text-base">${(p * 100).toFixed(1)}%</div><div class="text-gray-500">fair ${c.fair[i].toFixed(2)}</div></div>`).join('')}
+      </div>
+      ${pickBlock(c, top)}
+    </article>`;
+  }).join('');
+  $('results').innerHTML = html ? slipBlock() + html : '<p class="text-sm text-gray-600">Enter three odds per match to see results.</p>';
+}
+
+/* ---------- Saved scans (this device) ---------- */
+const KEY = 'odds-reader-history';
+const loadHist = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+function saveHistory() {
+  const valid = matches.filter(m => calc(m.o));
+  if (!valid.length) return;
+  const h = loadHist(); h.unshift({ t: new Date().toLocaleString(), m: valid });
+  localStorage.setItem(KEY, JSON.stringify(h.slice(0, 20)));
+  renderHist();
+}
+function renderHist() {
+  const h = loadHist();
+  $('scanCount').textContent = h.length;
+  $('historyWrap').classList.toggle('hidden', !h.length);
+  $('history').innerHTML = h.map((e, i) => `<button data-h="${i}" class="card w-full text-left"><b>${e.m.length} match${e.m.length > 1 ? 'es' : ''}</b><div class="text-xs text-gray-500">${e.t}</div></button>`).join('');
+}
+$('history').addEventListener('click', e => {
+  const b = e.target.closest('[data-h]'); if (!b) return;
+  matches = loadHist()[b.dataset.h].m; renderEditor(); go('predictions');
+});
+$('clearHist').onclick = () => { localStorage.removeItem(KEY); renderHist(); };
+renderHist();
+</script>
+</body>
+</html>
