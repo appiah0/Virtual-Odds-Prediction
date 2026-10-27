@@ -180,8 +180,8 @@ function go(name) {
 document.addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
 
 /* ---------- Accounts + credits (Supabase) ---------- */
-const SUPABASE_URL = 'PASTE_PROJECT_URL';
-const SUPABASE_ANON_KEY = 'PASTE_ANON_KEY';
+const SUPABASE_URL = 'https://hyxrwhgakduytptasihp.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_lJKyhjDgsKNZATFaDDwgNg_6vwJ2V_n';
 const configured = !SUPABASE_URL.startsWith('PASTE');
 const sb = configured ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
