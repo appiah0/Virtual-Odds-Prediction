@@ -4,598 +4,791 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#7c3aed">
-<title>Odds Reader</title>
+<title>INSTANTVIRTUALS - Virtual football odds reader</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://js.paystack.co/v1/inline.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<script>
+tailwind.config = { theme: { extend: { fontFamily: { display: ['Outfit','sans-serif'], sans: ['Plus Jakarta Sans','sans-serif'] } } } };
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
 <style>
-  body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#f6f3ff;color:#1c1233;padding-bottom:5.5rem}
-  .hero{background:linear-gradient(135deg,#6d28d9,#a855f7)}
-  .card{background:#fff;border:1px solid #e6defa;border-radius:1.25rem;padding:1rem}
-  .btn{background:linear-gradient(90deg,#7c3aed,#4f46e5);color:#fff;font-weight:800;border-radius:.9rem}
-  .btn:disabled{opacity:.4}
-  .btn:active{transform:scale(.98)}
-  .ghost{background:#f1ecfd;color:#5b21b6;font-weight:600;border-radius:.9rem}
-  .cell{width:100%;background:#f6f3ff;border:1px solid #ddd1fa;border-radius:.5rem;padding:.45rem;text-align:center}
-  .field{width:100%;background:#f6f3ff;border:1px solid #ddd1fa;border-radius:.75rem;padding:.7rem}
-  .tab{display:none}.tab.on{display:block}
-  nav button.on{color:#7c3aed;font-weight:800}
-  .bar>div{height:100%;transition:width .5s ease}
-  summary{cursor:pointer;font-weight:600}
-  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:root{--p1:#a855f7;--p2:#7c3aed;--ink:#0f1226;--mute:#6b7280;--line:#e6e8f2;--soft:#f5f3ff}
+*{-webkit-tap-highlight-color:transparent}
+html,body{background:#fff;color:var(--ink);font-family:'Plus Jakarta Sans',sans-serif}
+.font-display{font-family:'Outfit',sans-serif}
+.wrap{max-width:480px;margin:0 auto;padding:0 20px}
+.card{background:#fff;border:1.5px solid var(--line);border-radius:22px}
+.grad{background:linear-gradient(135deg,var(--p1),var(--p2))}
+.grad-text{background:linear-gradient(90deg,#7c3aed,#db2777);-webkit-background-clip:text;background-clip:text;color:transparent}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:'Outfit',sans-serif;font-weight:700;border-radius:999px;padding:15px 24px;transition:transform .15s,box-shadow .15s;cursor:pointer;border:0}
+.btn:active{transform:scale(.97)}
+.btn-primary{color:#fff;background:linear-gradient(135deg,var(--p1),var(--p2));box-shadow:0 10px 24px -8px rgba(124,58,237,.6)}
+.btn-ghost{background:#fff;color:var(--ink);border:1.5px solid #d6d9e6}
+.btn-green{color:#fff;background:linear-gradient(135deg,#10b981,#047857)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:7px 12px;border-radius:999px;background:#f3f5fa;border:1px solid var(--line)}
+.input{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:13px 14px;font-size:15px;background:#fff;outline:none;transition:border .15s,box-shadow .15s}
+.input:focus{border-color:var(--p2);box-shadow:0 0 0 4px rgba(124,58,237,.12)}
+.label{font-size:13px;font-weight:700;margin-bottom:6px;display:block;color:#374151}
+.dark-card{background:linear-gradient(135deg,#0f1226,#1e1b4b);color:#fff;border-radius:24px}
+.eyebrow{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:#7c3aed}
+.i{width:18px;height:18px;stroke-width:2.2}
+.i-lg{width:22px;height:22px}
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 0 8px;font-size:10.5px;font-weight:600;color:#8b90a5}
+.nav a.on{color:var(--p2)}
+.nav a.on .pill{background:#ede9fe}
+.pill{padding:4px 14px;border-radius:999px;display:flex}
+.bar{height:9px;border-radius:999px;background:#eceef6;overflow:hidden}
+.bar>span{display:block;height:100%;border-radius:999px;transition:width .5s}
+.faq-a{display:none}.faq.open .faq-a{display:block}.faq.open .chev{transform:rotate(180deg)}
+.chev{transition:transform .2s}
+.drop{border:2px dashed #c4b5fd;background:var(--soft);border-radius:22px}
+.drop.over{background:#ede9fe;border-color:var(--p2)}
+.toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-120px);background:#0f1226;color:#fff;padding:12px 18px;border-radius:14px;font-size:14px;font-weight:600;z-index:100;transition:transform .3s;max-width:90vw}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.status-pending{background:#fef3c7;color:#92400e}.status-successful{background:#d1fae5;color:#065f46}.status-failed{background:#fee2e2;color:#991b1b}
+@keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin 1s linear infinite}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+:focus-visible{outline:3px solid #c4b5fd;outline-offset:2px}
 </style>
 </head>
 <body>
-<div id="authScreen" class="fixed inset-0 z-50 overflow-y-auto hidden" style="background:linear-gradient(160deg,#f3e8ff,#ede9fe 55%,#ffffff)">
-  <div class="max-w-md mx-auto px-5 py-8">
-    <span class="inline-block rounded-full border border-purple-300 bg-white/70 px-4 py-1 text-sm font-extrabold text-purple-800 tracking-wide">ODDS READER</span>
-
-    <!-- LOGIN -->
-    <div id="v-login">
-      <h1 class="text-3xl font-extrabold mt-5">Login</h1>
-      <p class="text-sm text-gray-600 mt-1">Don't have an account? <a href="#" data-view="signup" class="text-purple-700 font-bold">Sign up here</a></p>
-      <div class="field flex items-center gap-2 mt-6">
-        <span id="liPre" class="hidden text-gray-700 font-semibold">+233</span>
-        <input id="liId" type="text" autocomplete="username" placeholder="Phone or email address" class="bg-transparent outline-none flex-1">
-      </div>
-      <div class="field flex items-center gap-2 mt-3">
-        <span>🔒</span>
-        <input id="liPw" type="password" autocomplete="current-password" placeholder="Password" class="bg-transparent outline-none flex-1">
-        <a href="#" data-view="forgot" class="text-xs font-extrabold text-purple-700">FORGOT</a>
-      </div>
-      <label class="flex items-center gap-2 mt-4 text-sm text-gray-700"><input id="liRem" type="checkbox" checked class="w-4 h-4 accent-purple-700"> Remember me</label>
-      <div class="flex justify-end mt-6"><button id="loginBtn" class="btn px-7 py-3">Sign In →</button></div>
-    </div>
-
-    <!-- SIGN UP -->
-    <div id="v-signup" class="hidden">
-      <h1 class="text-3xl font-extrabold mt-5">Create account</h1>
-      <p class="text-sm text-gray-600 mt-1">Already have an account? <a href="#" data-view="login" class="text-purple-700 font-bold">Sign in here</a></p>
-      <div class="grid grid-cols-2 gap-2 mt-5">
-        <input id="suFirst" class="field" placeholder="First Name" autocomplete="given-name">
-        <input id="suSur" class="field" placeholder="Surname" autocomplete="family-name">
-      </div>
-      <input id="suOther" class="field mt-2" placeholder="Other Name (Optional)">
-      <div class="grid grid-cols-[1fr_auto_1.2fr] gap-2 mt-2">
-        <select class="field" aria-label="Country"><option>Ghana (GHS)</option></select>
-        <div class="field font-semibold text-gray-700 flex items-center">+233</div>
-        <input id="suPhone" class="field" inputmode="tel" placeholder="Phone Number" autocomplete="tel-national">
-      </div>
-      <input id="suEmail" type="email" class="field mt-2" placeholder="Email Address" autocomplete="email">
-      <input id="suPw" type="password" class="field mt-2" placeholder="Password (Min 8 characters)" autocomplete="new-password">
-      <input id="suPw2" type="password" class="field mt-2" placeholder="Confirm Password" autocomplete="new-password">
-      <label class="flex items-center gap-2 mt-4 text-sm text-gray-700"><input id="suTerms" type="checkbox" class="w-4 h-4 accent-purple-700"> <span>I agree to the <a href="#" data-terms class="text-purple-700 font-bold underline">Terms &amp; Conditions</a></span></label>
-      <div class="flex justify-end mt-6"><button id="suBtn" class="btn px-7 py-3">Create Account →</button></div>
-    </div>
-
-    <!-- FORGOT -->
-    <div id="v-forgot" class="hidden">
-      <h1 class="text-3xl font-extrabold mt-5">Reset password</h1>
-      <p class="text-sm text-gray-600 mt-1">Enter the email on your account and we will send you a reset link.</p>
-      <input id="fpEmail" type="email" class="field mt-6" placeholder="Email Address" autocomplete="email">
-      <div class="flex justify-between items-center mt-6">
-        <a href="#" data-view="login" class="text-sm font-bold text-purple-700">← Back to login</a>
-        <button id="fpBtn" class="btn px-7 py-3">Send link →</button>
-      </div>
-    </div>
-
-    <!-- NEW PASSWORD -->
-    <div id="v-reset" class="hidden">
-      <h1 class="text-3xl font-extrabold mt-5">New password</h1>
-      <p class="text-sm text-gray-600 mt-1">Choose a new password for your account.</p>
-      <input id="rsPw" type="password" class="field mt-6" placeholder="New password (Min 8 characters)" autocomplete="new-password">
-      <input id="rsPw2" type="password" class="field mt-2" placeholder="Confirm new password" autocomplete="new-password">
-      <div class="flex justify-end mt-6"><button id="rsBtn" class="btn px-7 py-3">Save password →</button></div>
-    </div>
-
-    <p id="amsg" class="text-sm text-red-600 mt-4" role="alert"></p>
-  </div>
-</div>
-
-<div id="terms" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-3">
-  <div class="bg-white rounded-3xl p-5 max-w-md w-full max-h-[80vh] overflow-y-auto">
-    <h2 class="font-extrabold text-lg">Terms &amp; Conditions</h2>
-    <ol class="list-decimal pl-5 mt-3 space-y-2 text-sm text-gray-700">
-      <li>You must be 18 years or older to use Odds Reader.</li>
-      <li>Odds Reader reads odds from screenshots and shows the probabilities built into them. It does not predict results. Virtual football results are random and you can lose money.</li>
-      <li>You are fully responsible for any bets you place. Only stake what you can afford to lose.</li>
-      <li>Credits pay for reading screenshots. Credits already used cannot be refunded.</li>
-      <li>Keep your password private. We may suspend accounts that misuse the service.</li>
-    </ol>
-    <button id="termsClose" class="btn w-full py-3 mt-4">Close</button>
-  </div>
-</div>
-
-<header class="px-4 pt-5 max-w-md mx-auto">
-  <div class="text-xs text-purple-700">Welcome</div>
-  <div id="hello" class="font-extrabold text-xl">Odds Reader</div>
-</header>
-
-<main class="max-w-md mx-auto px-4 mt-3">
-
-<!-- HOME -->
-<section id="t-home" class="tab on space-y-3">
-  <div class="hero rounded-3xl p-4 text-white">
-    <div class="text-xs opacity-80">Scan credits</div>
-    <div class="flex justify-between items-center">
-      <div class="text-4xl font-extrabold"><span id="bal">0</span></div>
-      <button data-go="packages" class="bg-black rounded-full px-4 py-2 text-sm font-bold">Get credits +</button>
-    </div>
-    <div class="text-xs opacity-80 mt-1">1 credit = 1 screenshot read</div>
-  </div>
-  <div class="grid grid-cols-2 gap-3 text-center">
-    <div class="card"><div class="text-2xl font-extrabold" id="scanCount">0</div><div class="text-xs text-gray-500">Saved scans</div></div>
-    <div class="card"><div class="text-2xl font-extrabold">1X2</div><div class="text-xs text-gray-500">Odds format read</div></div>
-  </div>
-  <button data-go="predictions" class="card w-full text-left">
-    <div class="font-extrabold">Read an odds screenshot</div>
-    <div class="text-sm text-gray-600">Upload a screenshot from your games lobby. See the probabilities and margin built into the odds.</div>
-  </button>
-  <button data-go="guide" class="card w-full text-left">
-    <div class="font-extrabold">How it works</div>
-    <div class="text-sm text-gray-600">Four steps, and what the numbers mean.</div>
-  </button>
-  <div class="card text-xs text-amber-900 bg-amber-50 border-amber-200">Virtual football results are random. Picks here follow the odds and can lose. 18+ only. Stake only what you can afford to lose.</div>
-</section>
-
-<!-- PACKAGES -->
-<section id="t-packages" class="tab space-y-3">
-  <h2 class="text-xl font-extrabold">Scan credit packages</h2>
-  <p class="text-sm text-gray-600">Credits pay for reading screenshots. They do not buy winning picks.</p>
-  <div id="packs" class="space-y-3"></div>
-  <p id="walletMsg" class="text-xs text-purple-700"></p>
-</section>
-
-<!-- PREDICTIONS -->
-<section id="t-predictions" class="tab space-y-3">
-  <div class="card">
-    <h2 class="font-extrabold text-lg">Upload match screenshot</h2>
-    <p class="text-xs text-gray-500">PNG, JPG, WEBP or HEIC</p>
-    <label for="file" class="block mt-3 text-center rounded-2xl border-2 border-dashed border-purple-300 py-8 cursor-pointer bg-purple-50">
-      <span id="dropText" class="font-semibold text-purple-800">Tap to select a screenshot</span>
-    </label>
-    <input id="file" type="file" accept="image/*,.heic,.heif" class="hidden">
-    <img id="preview" class="hidden rounded-xl mt-3 max-h-56 mx-auto" alt="Selected screenshot">
-    <button id="scan" class="btn w-full py-3 mt-3" disabled>Read odds (1 credit)</button>
-    <div id="progressWrap" class="hidden mt-3">
-      <div class="bar h-2 rounded-full bg-purple-100 overflow-hidden"><div id="progress" class="bg-purple-500" style="width:0%"></div></div>
-      <p id="status" class="text-xs text-gray-600 mt-1"></p>
-    </div>
-    <p id="scanMsg" class="text-xs text-purple-700 mt-2"></p>
-  </div>
-
-  <div id="editor" class="hidden card">
-    <h3 class="font-extrabold">Check what was read</h3>
-    <p class="text-xs text-gray-500 mb-2">Fix any misread digit. Columns: home, away, 1, X, 2.</p>
-    <div id="rows" class="space-y-2"></div>
-    <div class="flex gap-2 mt-3">
-      <button id="addRow" class="ghost py-2 px-4 text-sm">Add match</button>
-      <button id="analyze" class="btn py-2 flex-1">Update results</button>
-    </div>
-  </div>
-
-  <div id="results" class="space-y-3"></div>
-</section>
-
-<!-- GUIDE -->
-<section id="t-guide" class="tab space-y-3">
-  <h2 class="text-xl font-extrabold">How to use Odds Reader</h2>
-  <div class="card"><b>Open your games lobby.</b><div class="text-sm text-gray-600">Go to the 1X2 odds screen for the round.</div></div>
-  <div class="card"><b>Take a screenshot.</b><div class="text-sm text-gray-600">Capture all the matches and odds in one clear image.</div></div>
-  <div class="card"><b>Upload it in Predictions.</b><div class="text-sm text-gray-600">The app reads team codes and odds. Fix any digit it got wrong.</div></div>
-  <div class="card"><b>Read the numbers, then decide.</b><div class="text-sm text-gray-600">You see the probability each outcome carries, the bookmaker's margin and a suggested slip. The choice and the risk are yours.</div></div>
-  <div class="card bg-purple-50">
-    <b>Good to know</b>
-    <div class="text-sm text-gray-700 mt-1">Adding more picks to one slip lowers the chance that every pick wins. The slip card shows that chance so you can see it.</div>
-  </div>
-</section>
-
-<!-- ABOUT -->
-<section id="t-about" class="tab space-y-3">
-  <h2 class="text-xl font-extrabold">About Odds Reader</h2>
-  <div class="card text-sm text-gray-700">Odds Reader is a tool that reads an odds screenshot and turns the prices into probabilities. It removes the bookmaker's margin to show fair odds and points to the outcome the market rates as most likely.</div>
-  <div class="card text-sm text-gray-700"><b>What it cannot do.</b> It cannot know the result of a virtual match. Those results come from a random number generator, so any pick can lose.</div>
-  <div class="card">
-    <h3 class="font-extrabold mb-2">Questions</h3>
-    <details class="mb-2"><summary>How are the picks made?</summary><p class="text-sm text-gray-600 mt-1">The app converts each odd to a probability, removes the margin, and ranks the outcomes. The top one is the pick.</p></details>
-    <details class="mb-2"><summary>Are results guaranteed?</summary><p class="text-sm text-gray-600 mt-1">No. Nothing is guaranteed and you can lose money.</p></details>
-    <details><summary>Why do scans cost credits?</summary><p class="text-sm text-gray-600 mt-1">Credits cover hosting and running the service.</p></details>
-  </div>
-  <div class="card text-xs text-amber-900 bg-amber-50 border-amber-200"><b>Responsible gaming.</b> 18+ only. Never stake more than you can afford to lose. If gambling is causing you harm, stop and talk to someone you trust.</div>
-</section>
-
-<!-- PROFILE -->
-<section id="t-profile" class="tab space-y-3">
-  <div id="authIn" class="card">
-    <div class="text-xs text-gray-500">Signed in as</div>
-    <div id="who" class="font-extrabold text-lg"></div>
-    <div id="whoSub" class="text-xs text-gray-500"></div>
-    <div class="text-sm mt-2">Credits: <b id="bal2">0</b></div>
-    <button id="logout" class="w-full mt-3 py-2 rounded-xl bg-red-50 text-red-700 font-semibold">Sign out</button>
-  </div>
-    <div id="historyWrap" class="hidden">
-    <div class="flex justify-between items-center">
-      <h3 class="font-extrabold">Saved scans</h3>
-      <button id="clearHist" class="text-xs text-purple-700 underline">Clear</button>
-    </div>
-    <div id="history" class="space-y-2 mt-2"></div>
-  </div>
-</section>
-
-</main>
-
-<nav class="fixed bottom-0 inset-x-0 bg-white border-t border-purple-100">
-  <div class="max-w-md mx-auto grid grid-cols-6 text-[11px] text-gray-500">
-    <button data-go="home" class="py-2 on">🏠<br>Home</button>
-    <button data-go="packages" class="py-2">📦<br>Packages</button>
-    <button data-go="predictions" class="py-2">🧠<br>Predictions</button>
-    <button data-go="guide" class="py-2">📖<br>Guide</button>
-    <button data-go="about" class="py-2">ℹ️<br>About</button>
-    <button data-go="profile" class="py-2">👤<br>Profile</button>
-  </div>
-</nav>
+<div id="app"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script>
-const $ = id => document.getElementById(id);
-let imgFile = null, matches = [], user = null, balance = 0;
-
-/* ---------- Tabs ---------- */
-function go(name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.id === 't-' + name));
-  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.go === name));
-  scrollTo({ top: 0 });
-}
-document.addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
-
-/* ---------- Accounts + credits (Supabase) ---------- */
-const SUPABASE_URL = 'https://hyxrwhgakduytptasihp.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_lJKyhjDgsKNZATFaDDwgNg_6vwJ2V_n';
-const configured = !SUPABASE_URL.startsWith('PASTE');
-const sb = configured ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-
-const PACKS = [
-  { name: 'Starter', credits: 5, ghs: 5 },
-  { name: 'Popular', credits: 15, ghs: 12 },
-  { name: 'Mega', credits: 40, ghs: 25 }
-];
-$('packs').innerHTML = PACKS.map((p, i) => `
-  <button data-p="${i}" class="card w-full flex justify-between items-center text-left ${i === 1 ? 'border-purple-400' : ''}">
-    <div><div class="font-extrabold">${p.name}</div><div class="text-xs text-gray-500">${p.credits} screenshot reads</div></div>
-    <div class="bg-gray-900 text-white rounded-full px-4 py-2 text-sm font-bold">GHS ${p.ghs}</div>
-  </button>`).join('');
-const PAYSTACK_PUBLIC_KEY = 'pk_test_PASTE_YOUR_PUBLIC_KEY';
-$('packs').addEventListener('click', e => {
-  const b = e.target.closest('[data-p]'); if (!b) return;
-  if (!user) { $('walletMsg').textContent = 'Log in from the Profile tab first.'; return; }
-  if (PAYSTACK_PUBLIC_KEY.includes('PASTE')) { $('walletMsg').textContent = 'Add your Paystack public key in the code.'; return; }
-  const p = PACKS[b.dataset.p];
-  PaystackPop.setup({
-    key: PAYSTACK_PUBLIC_KEY,
-    email: user.email,
-    amount: p.ghs * 100,
-    currency: 'GHS',
-    ref: 'OR-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
-    metadata: { user_id: user.id },
-    callback: function () { $('walletMsg').textContent = 'Payment received. Adding your credits...'; waitForCredits(balance); },
-    onClose: function () {}
-  }).openIframe();
-});
-async function waitForCredits(before) {
-  for (let i = 0; i < 15; i++) {
-    await new Promise(r => setTimeout(r, 2000));
-    await refreshBalance();
-    if (balance > before) { $('walletMsg').textContent = 'Credits added.'; return; }
-  }
-  $('walletMsg').textContent = 'Still confirming. Pull to refresh in a minute. If credits do not appear, contact support with your payment reference.';
-}
-
-function setBal(n) { balance = n; $('bal').textContent = n; $('bal2').textContent = n; }
-async function refreshBalance() {
-  let n = 0;
-  if (user) {
-    const { data } = await sb.from('wallets').select('tokens').eq('user_id', user.id).maybeSingle();
-    n = data?.tokens ?? 0;
-  }
-  setBal(n);
-}
-const normPhone = v => {
-  let d = (v || '').replace(/\D/g, '');
-  if (d.startsWith('233')) d = d.slice(3);
-  d = d.replace(/^0+/, '');
-  return d.length === 9 ? '+233' + d : null;
+/* =========================================================
+   CONFIG - edit these values for your deployment
+   ========================================================= */
+const CONFIG = {
+  brand: 'INSTANTVIRTUALS',
+  model: 'claude-sonnet-5-5',
+  // Production: point this at your own serverless proxy that holds the API key.
+  // Leave empty to call Anthropic directly using the key saved in Profile > Settings.
+  proxyUrl: '',
+  demoMode: true,            // shows "confirm / reject" buttons on pending deposits (no real admin backend)
+  signupCoins: 20,           // free coins on registration so new users can try 2 standard reads
+  scanCost: { standard: { coins: 10 }, detailed: { diamonds: 1 } },
+  momo: {
+    'MTN MoMo':     { number: '0XX XXX XXXX', name: 'Account name' },
+    'Telecel Cash': { number: '0XX XXX XXXX', name: 'Account name' },
+    'AT Money':     { number: '0XX XXX XXXX', name: 'Account name' }
+  },
+  coinPacks: [
+    { id: 'starter', name: 'Starter Coins Pack', price: 350,  coins: 350 },
+    { id: 'pro',     name: 'Pro Coins Pack',     price: 700,  coins: 800,  popular: true },
+    { id: 'mega',    name: 'Mega Coins Pack',    price: 1200, coins: 1500 }
+  ],
+  diamondPacks: [
+    { id: 'd1', name: 'Diamond Starter', price: 500,  diamonds: 5 },
+    { id: 'd2', name: 'Diamond Plus',    price: 1000, diamonds: 12, popular: true },
+    { id: 'd3', name: 'Diamond Max',     price: 2000, diamonds: 30 }
+  ],
+  support: { email: 'support@yourdomain.com' },
+  lobbyUrl: 'https://www.sportybet.com/gh/'
 };
-let profile = null, recovering = false;
-const msg = t => { $('amsg').textContent = t || ''; };
-function showView(n) {
-  ['login', 'signup', 'forgot', 'reset'].forEach(v => $('v-' + v).classList.toggle('hidden', v !== n));
-  msg(''); $('authScreen').scrollTo({ top: 0 });
-}
-document.addEventListener('click', e => {
-  const a = e.target.closest('[data-view]');
-  if (a) { e.preventDefault(); showView(a.dataset.view); }
-  if (e.target.closest('[data-terms]')) { e.preventDefault(); $('terms').classList.remove('hidden'); }
-});
-$('termsClose').onclick = () => $('terms').classList.add('hidden');
-$('liId').addEventListener('input', () => $('liPre').classList.toggle('hidden', !/^[\d\s]+$/.test($('liId').value)));
 
-async function onUser(u) {
-  user = u;
-  $('authScreen').classList.toggle('hidden', (!!u && !recovering) || !configured);
-  profile = null;
-  if (u) {
-    const { data } = await sb.from('profiles').select('first_name,surname,phone').eq('user_id', u.id).maybeSingle();
-    profile = data;
-  }
-  $('hello').textContent = profile?.first_name || (u ? u.email.split('@')[0] : 'Odds Reader');
-  $('who').textContent = profile ? `${profile.first_name} ${profile.surname}` : (u?.email || '');
-  $('whoSub').textContent = u ? `${u.email}${profile?.phone ? ' · ' + profile.phone : ''}` : '';
-  await refreshBalance();
-}
+/* =========================================================
+   Helpers
+   ========================================================= */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ic = (n, c = '') => `<i data-lucide="${n}" class="i ${c}"></i>`;
+const money = n => 'GH\u20B5 ' + Number(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const uid = p => p + Math.random().toString(36).slice(2, 8).toUpperCase();
+const fmtDate = t => new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 3000); }
+function normPhone(p) { let d = String(p).replace(/\D/g, ''); if (d.startsWith('233')) d = d.slice(3); if (d.startsWith('0')) d = d.slice(1); return d; }
+async function sha(s) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('iv-salt:' + s)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join(''); }
 
-if (configured) {
-  /* Remember me: if the user chose not to be remembered, end the session when the browser is reopened */
-  if (localStorage.getItem('or-remember') === '0' && !sessionStorage.getItem('or-active')) sb.auth.signOut();
-  const savedId = localStorage.getItem('or-id');
-  if (savedId) { $('liId').value = savedId; $('liId').dispatchEvent(new Event('input')); }
+/* =========================================================
+   Store - localStorage persistence
+   ========================================================= */
+const Store = {
+  users() { try { return JSON.parse(localStorage.getItem('iv_users')) || []; } catch { return []; } },
+  saveUsers(u) { localStorage.setItem('iv_users', JSON.stringify(u)); },
+  saveUser(user) { const all = this.users(); const i = all.findIndex(x => x.id === user.id); if (i > -1) all[i] = user; else all.push(user); this.saveUsers(all); },
+  session() {
+    try { return JSON.parse(localStorage.getItem('iv_session')) || JSON.parse(sessionStorage.getItem('iv_session')); } catch { return null; }
+  },
+  setSession(id, remember) {
+    this.clearSession();
+    (remember ? localStorage : sessionStorage).setItem('iv_session', JSON.stringify({ id, t: Date.now() }));
+  },
+  clearSession() { localStorage.removeItem('iv_session'); sessionStorage.removeItem('iv_session'); },
+  me() { const s = this.session(); return s ? this.users().find(u => u.id === s.id) || null : null; },
+  apiKey() { return localStorage.getItem('iv_api_key') || ''; },
+  setApiKey(k) { k ? localStorage.setItem('iv_api_key', k) : localStorage.removeItem('iv_api_key'); },
+  rememberedLogin() { return localStorage.getItem('iv_last_login') || ''; },
+  setRememberedLogin(v) { v ? localStorage.setItem('iv_last_login', v) : localStorage.removeItem('iv_last_login'); }
+};
 
-  sb.auth.onAuthStateChange((ev, s) => {
-    if (ev === 'PASSWORD_RECOVERY') { recovering = true; showView('reset'); }
-    onUser(s?.user || null);
-  });
-  sb.auth.getSession().then(({ data }) => onUser(data.session?.user || null));
-
-  $('loginBtn').onclick = async () => {
-    const id = $('liId').value.trim(), pw = $('liPw').value;
-    if (!id || !pw) return msg('Enter your email or phone number and your password.');
-    let error = null;
-    if (id.includes('@')) {
-      ({ error } = await sb.auth.signInWithPassword({ email: id, password: pw }));
-    } else {
-      const ph = normPhone(id);
-      if (!ph) return msg('Enter a valid Ghana phone number.');
-      const { data, error: fe } = await sb.functions.invoke('phone-login', { body: { phone: ph, password: pw } });
-      if (fe || !data?.access_token) error = { message: 'Wrong phone number or password.' };
-      else ({ error } = await sb.auth.setSession({ access_token: data.access_token, refresh_token: data.refresh_token }));
-    }
-    if (error) return msg(error.message);
-    const keep = $('liRem').checked;
-    localStorage.setItem('or-remember', keep ? '1' : '0');
-    sessionStorage.setItem('or-active', '1');
-    keep ? localStorage.setItem('or-id', id) : localStorage.removeItem('or-id');
-    msg(''); $('liPw').value = '';
-  };
-
-  $('suBtn').onclick = async () => {
-    const first = $('suFirst').value.trim(), sur = $('suSur').value.trim(), other = $('suOther').value.trim();
-    const phone = normPhone($('suPhone').value), email = $('suEmail').value.trim();
-    const pw = $('suPw').value, pw2 = $('suPw2').value;
-    if (!first || !sur) return msg('Enter your first name and surname.');
-    if (!phone) return msg('Enter a valid Ghana phone number, for example 0533327517.');
-    if (!/^\S+@\S+\.\S+$/.test(email)) return msg('Enter a valid email address.');
-    if (pw.length < 8) return msg('Password must be at least 8 characters.');
-    if (pw !== pw2) return msg('Passwords do not match.');
-    if (!$('suTerms').checked) return msg('Please agree to the Terms & Conditions.');
-    const { data, error } = await sb.auth.signUp({ email, password: pw, options: { data: { first_name: first, surname: sur, other_name: other, phone } } });
-    if (error) return msg(/database error/i.test(error.message) ? 'That phone number is already registered.' : error.message);
-    localStorage.setItem('or-remember', '1'); sessionStorage.setItem('or-active', '1');
-    if (!data.session) { showView('login'); msg('Account created. Check your email to confirm it, then sign in.'); }
-  };
-
-  $('fpBtn').onclick = async () => {
-    const email = $('fpEmail').value.trim();
-    if (!/^\S+@\S+\.\S+$/.test(email)) return msg('Enter the email address on your account.');
-    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
-    msg(error ? error.message : 'If that email has an account, a reset link is on its way. Check your inbox.');
-  };
-
-  $('rsBtn').onclick = async () => {
-    const a = $('rsPw').value, b = $('rsPw2').value;
-    if (a.length < 8) return msg('Password must be at least 8 characters.');
-    if (a !== b) return msg('Passwords do not match.');
-    const { error } = await sb.auth.updateUser({ password: a });
-    if (error) return msg(error.message);
-    recovering = false; await onUser(user); showView('login');
-  };
-
-  $('logout').onclick = () => { sessionStorage.removeItem('or-active'); sb.auth.signOut(); };
-}
-
-/* ---------- Image selection (HEIC supported) ---------- */
-$('file').addEventListener('change', async e => {
-  let f = e.target.files[0];
-  if (!f) return;
-  $('progressWrap').classList.remove('hidden');
-  try {
-    if (/heic|heif/i.test(f.type) || /\.(heic|heif)$/i.test(f.name)) {
-      $('status').textContent = 'Converting HEIC image...';
-      const out = await heic2any({ blob: f, toType: 'image/jpeg', quality: 0.92 });
-      f = new File([Array.isArray(out) ? out[0] : out], 'screenshot.jpg', { type: 'image/jpeg' });
-    }
-    await new Promise((ok, no) => { const t = new Image(); t.onload = ok; t.onerror = () => no(); t.src = URL.createObjectURL(f); });
-  } catch {
-    $('status').textContent = 'This file could not be opened. Save it as JPG or PNG and try again.';
-    $('scan').disabled = true;
-    return;
-  }
-  imgFile = f;
-  $('status').textContent = '';
-  $('preview').src = URL.createObjectURL(f);
-  $('preview').classList.remove('hidden');
-  $('dropText').textContent = f.name;
-  $('scan').disabled = false;
-});
-
-function preprocess(file) {
-  return new Promise(res => {
-    const img = new Image();
-    img.onload = () => {
-      const s = 2, c = document.createElement('canvas');
-      c.width = img.width * s; c.height = img.height * s;
-      const x = c.getContext('2d');
-      x.drawImage(img, 0, 0, c.width, c.height);
-      const d = x.getImageData(0, 0, c.width, c.height), p = d.data;
-      for (let i = 0; i < p.length; i += 4) {
-        let g = 0.3 * p[i] + 0.59 * p[i + 1] + 0.11 * p[i + 2];
-        g = g > 150 ? 255 : g < 90 ? 0 : g;
-        p[i] = p[i + 1] = p[i + 2] = g;
-      }
-      x.putImageData(d, 0, 0);
-      c.toBlob(res, 'image/png');
+/* =========================================================
+   Auth
+   ========================================================= */
+const Auth = {
+  async register(f) {
+    const email = f.email.trim().toLowerCase(), phone = normPhone(f.phone);
+    if (!f.first.trim() || !f.last.trim()) throw 'Enter your first name and surname.';
+    if (!/^\S+@\S+\.\S+$/.test(email)) throw 'Enter a valid email address.';
+    if (phone.length !== 9) throw 'Enter a valid Ghana phone number (9 digits after +233).';
+    if (f.password.length < 6) throw 'Password must be at least 6 characters.';
+    if (f.password !== f.confirm) throw 'Passwords do not match.';
+    if (!f.terms) throw 'Please accept the Terms & Conditions.';
+    const users = Store.users();
+    if (users.some(u => u.email === email)) throw 'An account with this email already exists.';
+    if (users.some(u => u.phone === phone)) throw 'An account with this phone number already exists.';
+    const user = {
+      id: uid('U'), first: f.first.trim(), other: f.other.trim(), last: f.last.trim(), email, phone,
+      hash: await sha(f.password), referredBy: f.referral.trim().toUpperCase(), refCode: 'IV' + Math.random().toString(36).slice(2, 7).toUpperCase(),
+      created: Date.now(), wallet: { cash: 0, coins: CONFIG.signupCoins, diamonds: 0 }, tx: [], scans: []
     };
-    img.src = URL.createObjectURL(file);
-  });
-}
-
-/* ---------- OCR ---------- */
-$('scan').addEventListener('click', async () => {
-  if (!user) { $('scanMsg').textContent = 'Log in from the Profile tab to read screenshots.'; return; }
-  if (balance < 1) { $('scanMsg').textContent = 'You need at least 1 credit. See the Packages tab.'; return; }
-  $('scanMsg').textContent = '';
-  $('scan').disabled = true;
-  $('progressWrap').classList.remove('hidden');
-  try {
-    const blob = await preprocess(imgFile);
-    const { data } = await Tesseract.recognize(blob, 'eng', {
-      logger: m => {
-        if (m.status) $('status').textContent = m.status;
-        if (m.progress != null) $('progress').style.width = Math.round(m.progress * 100) + '%';
-      }
-    });
-    matches = parse(data.text);
-    if (matches.length) {
-      const { data: left, error } = await sb.rpc('use_token');
-      if (!error) setBal(left);
-      $('status').textContent = `Found ${matches.length} match${matches.length > 1 ? 'es' : ''}. Check the values below.`;
-    } else {
-      $('status').textContent = 'No odds found. Try a sharper, full-width screenshot, or add matches by hand.';
-      matches = [{ h: '', a: '', o: ['', '', ''] }];
-    }
-    renderEditor();
-    saveHistory();
-  } catch {
-    $('status').textContent = 'Could not read the image. Check your connection and try again.';
+    Store.saveUser(user); Store.setSession(user.id, true);
+    return user;
+  },
+  async login(identifier, password, remember) {
+    const id = identifier.trim();
+    const users = Store.users();
+    const u = id.includes('@') ? users.find(x => x.email === id.toLowerCase()) : users.find(x => x.phone === normPhone(id));
+    if (!u || u.hash !== await sha(password)) throw 'Incorrect phone/email or password.';
+    Store.setSession(u.id, remember);
+    Store.setRememberedLogin(remember ? id : '');
+    return u;
+  },
+  logout() { Store.clearSession(); location.hash = '#/'; },
+  resetByEmail(email) {
+    const u = Store.users().find(x => x.email === email.trim().toLowerCase());
+    // Reset links are email-only. A real deployment sends the email from a backend; the demo only confirms the request.
+    return !!u;
   }
-  $('scan').disabled = false;
-});
+};
 
-function parse(text) {
-  const teams = [...text.matchAll(/\b([A-Z]{3})\s*(?:vs|v5|ys|v)\s*([A-Z]{3})\b/gi)].map(m => [m[1].toUpperCase(), m[2].toUpperCase()]);
-  const nums = [...text.matchAll(/\b(\d{1,2})[.,](\d{2})\b/g)].map(m => parseFloat(m[1] + '.' + m[2])).filter(n => n >= 1.01 && n <= 99);
-  const out = [], count = Math.max(teams.length, Math.floor(nums.length / 3));
-  for (let i = 0; i < count; i++) out.push({ h: teams[i]?.[0] || '', a: teams[i]?.[1] || '', o: [nums[i * 3], nums[i * 3 + 1], nums[i * 3 + 2]].map(v => v ?? '') });
-  return out;
-}
+/* =========================================================
+   Wallet
+   ========================================================= */
+const Wallet = {
+  addTx(user, tx) { user.tx.unshift({ id: uid('TX'), ts: Date.now(), ...tx }); },
+  startDeposit(user, { network, amount, senderNumber, senderName }) {
+    const a = Number(amount);
+    if (!a || a < 1) throw 'Enter a valid amount.';
+    if (normPhone(senderNumber).length !== 9) throw 'Enter the MoMo number you paid from.';
+    if (senderName.trim().length < 2) throw 'Enter the name on that MoMo account.';
+    const tx = { id: uid('DEP'), ts: Date.now(), type: 'deposit', label: network + ' deposit', amount: a, status: 'pending', network, senderNumber, senderName: senderName.trim() };
+    user.tx.unshift(tx); Store.saveUser(user); return tx;
+  },
+  setStatus(user, txId, status) {
+    const tx = user.tx.find(t => t.id === txId); if (!tx || tx.status !== 'pending') return;
+    tx.status = status;
+    if (status === 'successful') user.wallet.cash += tx.amount;
+    Store.saveUser(user);
+  },
+  buy(user, pack, kind) {
+    if (user.wallet.cash < pack.price) throw 'Not enough wallet balance. Deposit first.';
+    user.wallet.cash -= pack.price;
+    if (kind === 'coins') user.wallet.coins += pack.coins; else user.wallet.diamonds += pack.diamonds;
+    this.addTx(user, { type: 'purchase', label: pack.name, amount: -pack.price, status: 'successful' });
+    Store.saveUser(user);
+  }
+};
 
-/* ---------- Editor ---------- */
-function renderEditor() {
-  $('editor').classList.remove('hidden');
-  $('rows').innerHTML = matches.map((m, i) => `
-    <div class="grid grid-cols-5 gap-1" data-i="${i}">
-      <input class="cell" data-f="h" value="${m.h}" placeholder="Home" aria-label="Home team">
-      <input class="cell" data-f="a" value="${m.a}" placeholder="Away" aria-label="Away team">
-      <input class="cell" data-f="0" inputmode="decimal" value="${m.o[0]}" placeholder="1" aria-label="Home odds">
-      <input class="cell" data-f="1" inputmode="decimal" value="${m.o[1]}" placeholder="X" aria-label="Draw odds">
-      <input class="cell" data-f="2" inputmode="decimal" value="${m.o[2]}" placeholder="2" aria-label="Away odds">
-    </div>`).join('');
-  analyze();
+/* =========================================================
+   Odds maths (computed locally, never by the model)
+   ========================================================= */
+const Odds = {
+  analyse(m) {
+    const o = m.odds || {};
+    const vals = [o.home, o.draw, o.away].map(Number);
+    if (vals.some(v => !(v > 1))) return null;
+    const raw = vals.map(v => 1 / v), sum = raw.reduce((a, b) => a + b, 0);
+    const p = raw.map(r => r / sum * 100);
+    let ou = null;
+    if (m.over_under && Number(m.over_under.over) > 1 && Number(m.over_under.under) > 1) {
+      const a = 1 / m.over_under.over, b = 1 / m.over_under.under, s = a + b;
+      ou = { line: m.over_under.line, over: a / s * 100, under: b / s * 100, margin: (s - 1) * 100 };
+    }
+    const names = ['Home', 'Draw', 'Away'];
+    return { odds: vals, p, margin: (sum - 1) * 100, fav: names[p.indexOf(Math.max(...p))], ou };
+  }
+};
+
+/* =========================================================
+   Scanner - Claude vision call
+   ========================================================= */
+const SYSTEM_PROMPT = `You read screenshots of virtual football betting lobbies. Extract only what is visible. Reply with JSON only, no prose, no code fences, in this exact shape:
+{"matches":[{"league":string|null,"home":string,"away":string,"odds":{"home":number,"draw":number,"away":number},"over_under":{"line":number,"over":number,"under":number}|null}],"notes":string}
+Rules: use team abbreviations exactly as shown. Use null for anything unreadable instead of guessing. Never invent odds. If the image is not a betting lobby, return {"matches":[],"notes":"Not a fixture screenshot."}.`;
+
+async function shrinkImage(file) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.85);
 }
-function readRows() {
-  matches = [...document.querySelectorAll('#rows [data-i]')].map(r => {
-    const g = f => r.querySelector(`[data-f="${f}"]`).value.trim();
-    return { h: g('h').toUpperCase(), a: g('a').toUpperCase(), o: [g(0), g(1), g(2)].map(v => v.replace(',', '.')) };
+async function callClaude(dataUrl) {
+  const key = Store.apiKey();
+  if (!CONFIG.proxyUrl && !key) throw 'Add your Claude API key in Profile > Settings first.';
+  const headers = { 'content-type': 'application/json' };
+  if (!CONFIG.proxyUrl) Object.assign(headers, { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' });
+  const res = await fetch(CONFIG.proxyUrl || 'https://api.anthropic.com/v1/messages', {
+    method: 'POST', headers,
+    body: JSON.stringify({
+      model: CONFIG.model, max_tokens: 2000, system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: [
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: dataUrl.split(',')[1] } },
+        { type: 'text', text: 'Extract every fixture row with its 1X2 odds and any over/under market shown.' }
+      ] }]
+    })
   });
+  if (!res.ok) { let m = ''; try { m = (await res.json()).error?.message; } catch {} throw 'Claude API error (' + res.status + '). ' + (m || ''); }
+  const data = await res.json();
+  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').replace(/```json|```/g, '').trim();
+  try { return JSON.parse(text); } catch { throw 'Could not parse the reply. Try a clearer screenshot.'; }
 }
-$('addRow').onclick = () => { readRows(); matches.push({ h: '', a: '', o: ['', '', ''] }); renderEditor(); };
-$('analyze').onclick = () => analyze();
 
-/* ---------- Maths ---------- */
-function calc(o) {
-  const n = o.map(Number);
-  if (n.some(v => !(v > 1))) return null;
-  const raw = n.map(v => 1 / v), sum = raw.reduce((a, b) => a + b, 0);
-  const p = raw.map(v => v / sum);
-  return { p, margin: (sum - 1) * 100, fair: p.map(v => 1 / v) };
+/* =========================================================
+   Views
+   ========================================================= */
+const V = {};
+const FAQ = [
+  ['Can it predict who will win?', 'No. Virtual football results come from a random number generator, so nobody can predict them reliably. This tool reads the odds on your screenshot and shows what they imply, including the bookmaker margin.'],
+  ['How do I get started?', 'Create a free account, take a screenshot of the Instant Football lobby, and upload it on the Predictions page. You get free coins on sign-up to try a few reads.'],
+  ['What happens to my screenshot?', 'It is sent to the Claude API to read the text and numbers, then shown back to you. This demo keeps only the extracted results in your browser.'],
+  ['Does paying more improve my chances?', 'No. Coins and diamonds only pay for reads. They do not change the odds or the outcome of any game.']
+];
+
+function head(back) {
+  return `<div class="wrap pt-5 pb-3 flex items-center gap-3">
+    ${back ? `<a href="${back}" class="w-10 h-10 rounded-full border border-[var(--line)] flex items-center justify-center" aria-label="Back">${ic('arrow-left')}</a>` : ''}
+    <div class="font-display font-extrabold text-xl grad-text">${CONFIG.brand}</div></div>`;
 }
-const LABELS = ['Home win', 'Draw', 'Away win'];
-const DC = ['Home or draw (1X)', 'Draw or away (X2)', 'Home or away (12)'];
-const level = p => p >= 0.55 ? 'Strong lean' : p >= 0.42 ? 'Moderate lean' : 'Weak lean';
 
-function pickBlock(c, top) {
-  const dc = [c.p[0] + c.p[1], c.p[1] + c.p[2], c.p[0] + c.p[2]];
-  const bi = dc.indexOf(Math.max(...dc));
+function aboutBlock() {
   return `
-    <div class="rounded-xl bg-purple-50 p-3 mt-3 text-sm">
-      <div class="flex justify-between"><span class="font-bold">Pick: ${LABELS[top]}</span><span class="text-purple-700">${level(c.p[top])}</span></div>
-      <div class="text-xs text-gray-600 mt-1">Safer cover: ${DC[bi]}, about ${(dc[bi] * 100).toFixed(0)}% by the odds.</div>
-      <div class="text-xs text-gray-500 mt-1">Picks follow the odds only. Results are random and any pick can lose.</div>
-    </div>`;
-}
-function slipBlock() {
-  const rows = matches.map(m => {
-    const c = calc(m.o); if (!c) return null;
-    const i = c.p.indexOf(Math.max(...c.p));
-    return { name: `${m.h || 'Home'} vs ${m.a || 'Away'}`, i, p: c.p[i], odd: Number(m.o[i]) };
-  }).filter(Boolean).sort((a, b) => b.p - a.p).slice(0, 3);
-  if (!rows.length) return '';
-  const odds = rows.reduce((a, r) => a * r.odd, 1), prob = rows.reduce((a, r) => a * r.p, 1);
-  return `
-    <article class="card border-purple-300">
-      <h3 class="font-extrabold">Suggested slip</h3>
-      <p class="text-xs text-gray-500">Your ${rows.length} highest-probability picks from this scan.</p>
-      <ul class="mt-2 space-y-1 text-sm">${rows.map(r => `<li class="flex justify-between"><span>${r.name}: ${LABELS[r.i]}</span><b>${r.odd.toFixed(2)}</b></li>`).join('')}</ul>
-      <div class="flex justify-between mt-3 text-sm border-t pt-2"><span>Combined odds <b>${odds.toFixed(2)}</b></span><span>Chance all win <b>${(prob * 100).toFixed(1)}%</b></span></div>
-    </article>`;
-}
-function analyze() {
-  if (document.querySelector('#rows [data-i]')) readRows();
-  const html = matches.map(m => {
-    const c = calc(m.o); if (!c) return '';
-    const top = c.p.indexOf(Math.max(...c.p));
-    return `
-    <article class="card">
-      <div class="flex justify-between items-baseline">
-        <h3 class="font-extrabold">${m.h || 'Home'} vs ${m.a || 'Away'}</h3>
-        <span class="text-xs text-gray-500">Margin ${c.margin.toFixed(1)}%</span>
-      </div>
-      <div class="bar flex h-3 rounded-full overflow-hidden mt-3 bg-purple-100">
-        <div style="width:${c.p[0] * 100}%;background:#8b5cf6"></div>
-        <div style="width:${c.p[1] * 100}%;background:#ddd6fe"></div>
-        <div style="width:${c.p[2] * 100}%;background:#4f46e5"></div>
-      </div>
-      <div class="grid grid-cols-3 gap-2 text-center mt-3 text-xs">
-        ${c.p.map((p, i) => `<div class="rounded-lg py-2 ${i === top ? 'bg-purple-100' : 'bg-gray-50'}"><div class="text-gray-500">${LABELS[i]}</div><div class="font-extrabold text-base">${(p * 100).toFixed(1)}%</div><div class="text-gray-500">fair ${c.fair[i].toFixed(2)}</div></div>`).join('')}
-      </div>
-      ${pickBlock(c, top)}
-    </article>`;
-  }).join('');
-  $('results').innerHTML = html ? slipBlock() + html : '<p class="text-sm text-gray-600">Enter three odds per match to see results.</p>';
+  <section class="wrap mt-10 text-center">
+    <span class="chip" style="color:#7c3aed;background:#faf5ff;border-color:#e9d5ff">${ic('badge-info')} ABOUT US</span>
+    <h2 class="font-display font-bold text-[28px] mt-4 leading-tight">A clearer way to read virtual football odds</h2>
+    <p class="text-[var(--mute)] mt-3 text-[15px]">We turn a screenshot of the lobby into a readable breakdown: the odds, the probabilities they imply, and the margin built into them.</p>
+  </section>
+  <section class="wrap mt-6">
+    <div class="dark-card p-5 grid grid-cols-3 text-center gap-2">
+      <div><div class="font-display font-bold text-2xl text-purple-300">3-way</div><div class="text-xs text-slate-400 mt-1">Odds read</div></div>
+      <div><div class="font-display font-bold text-2xl text-emerald-300">Margin</div><div class="text-xs text-slate-400 mt-1">Shown per match</div></div>
+      <div><div class="font-display font-bold text-2xl text-amber-300">Random</div><div class="text-xs text-slate-400 mt-1">Outcomes, always</div></div>
+    </div>
+    <div class="mt-4 space-y-3">
+      ${[['brain-circuit', '#f5f3ff', '#7c3aed', 'Vision-based odds reader', 'Claude reads the fixture rows and odds from your screenshot. The probability and margin maths is then done in your browser, not guessed by the model.'],
+         ['shield-check', '#ecfdf5', '#059669', 'Honest by design', 'No win-rate claims and no invented reviews. We tell you plainly that results are random and that losses are part of the game.'],
+         ['headset', '#eff6ff', '#0284c7', 'Support', 'Questions about a deposit or a read? Email ' + CONFIG.support.email + '.']]
+        .map(([i, bg, col, t, d]) => `<div class="card p-4 flex gap-4"><div class="w-12 h-12 rounded-2xl flex-none flex items-center justify-center" style="background:${bg};color:${col}">${ic(i, 'i-lg')}</div><div><div class="font-display font-bold">${t}</div><p class="text-sm text-[var(--mute)] mt-1">${d}</p></div></div>`).join('')}
+    </div>
+    <div class="card p-5 mt-4">
+      <div class="font-display font-bold flex items-center gap-2">${ic('trophy', 'text-amber-500')} Supported virtual leagues</div>
+      <p class="text-sm text-[var(--mute)] mt-1 mb-3">The reader works with any lobby layout that shows 1X2 odds, including:</p>
+      <div class="flex flex-wrap gap-2">${['England Premier|crown', 'Spain La Liga|star', 'Italy Serie A|shield', 'Germany Bundesliga|zap', 'Champions League|trophy', 'Euros|globe', 'Club World Cup|globe-2'].map(x => { const [n, i] = x.split('|'); return `<span class="chip">${ic(i, 'text-purple-600')}${n}</span>`; }).join('')}</div>
+    </div>
+    <div class="card p-5 mt-4">
+      <div class="font-display font-bold flex items-center gap-2 mb-1">${ic('circle-help', 'text-purple-600')} Frequently asked questions</div>
+      <div class="mt-3 space-y-2">${FAQ.map(([q, a]) => `<div class="faq card !rounded-2xl"><button data-action="faq" class="w-full flex justify-between items-center text-left p-4 font-semibold text-[15px]">${q}<span class="chev text-purple-600">${ic('chevron-down')}</span></button><p class="faq-a px-4 pb-4 text-sm text-[var(--mute)]">${a}</p></div>`).join('')}</div>
+    </div>
+    <div class="rounded-3xl p-5 mt-4" style="background:#f3e8ff;border:1.5px solid #e9d5ff">
+      <div class="font-display font-bold flex items-center gap-2">${ic('headset', 'text-purple-700')} Contact</div>
+      <p class="text-sm mt-3 flex items-center gap-2">${ic('mail', 'text-purple-600')} Email: <b>${CONFIG.support.email}</b></p>
+    </div>
+  </section>`;
 }
 
-/* ---------- Saved scans (this device) ---------- */
-const KEY = 'odds-reader-history';
-const loadHist = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
-function saveHistory() {
-  const valid = matches.filter(m => calc(m.o));
-  if (!valid.length) return;
-  const h = loadHist(); h.unshift({ t: new Date().toLocaleString(), m: valid });
-  localStorage.setItem(KEY, JSON.stringify(h.slice(0, 20)));
-  renderHist();
+function footer() {
+  return `<footer class="wrap mt-8 pb-10">
+    <div class="flex items-center justify-center gap-3 flex-wrap"><span class="font-display font-bold tracking-wide">VIRTUAL ODDS READER</span><span class="chip text-xs">18+ ONLY &middot; PLAY RESPONSIBLY</span></div>
+    <div class="mt-4 rounded-2xl p-4" style="background:#fffbeb;border:1.5px solid #fde68a;border-left:5px solid #f59e0b">
+      <div class="font-display font-bold flex items-center gap-2" style="color:#92400e">${ic('triangle-alert')} Financial advisory &amp; risk notice</div>
+      <p class="text-sm mt-2" style="color:#78350f">This tool reads odds from your screenshot and explains what they imply. It does <b>not</b> predict results. Virtual football outcomes are random, and losses are part of the game.</p>
+      <p class="text-sm mt-2" style="color:#78350f">Only stake money you can comfortably afford to lose. If gambling stops being fun, take a break and speak to someone you trust.</p>
+    </div>
+    <p class="text-center text-xs text-[var(--mute)] mt-5">&copy; 2026 Virtual Odds Reader Ghana. Not affiliated with SportyBet or any bookmaker.</p>
+  </footer>`;
 }
-function renderHist() {
-  const h = loadHist();
-  $('scanCount').textContent = h.length;
-  $('historyWrap').classList.toggle('hidden', !h.length);
-  $('history').innerHTML = h.map((e, i) => `<button data-h="${i}" class="card w-full text-left"><b>${e.m.length} match${e.m.length > 1 ? 'es' : ''}</b><div class="text-xs text-gray-500">${e.t}</div></button>`).join('');
+
+V.landing = () => `
+  <div class="relative overflow-hidden">
+    <div class="absolute -top-14 -right-16 w-72 h-72 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>
+    <div class="wrap pt-5 relative">
+      <div class="flex items-center gap-3 rounded-full px-4 py-3 border-[1.5px] border-purple-200" style="background:linear-gradient(90deg,#faf5ff,#f3e8ff)">
+        <div class="w-9 h-9 grad rounded-xl flex items-center justify-center text-white">${ic('zap')}</div>
+        <span class="font-display font-extrabold text-purple-700 tracking-wide">${CONFIG.brand}</span>
+        <span class="w-px h-5 bg-purple-200"></span><span class="text-[13px] font-semibold text-[var(--mute)]">Virtual Football &middot; Odds Reader</span>
+      </div>
+      <h1 class="font-display font-bold text-[34px] leading-[1.15] mt-8">Upload an Instant Football screenshot and our AI <span class="grad-text">reads the odds</span> shown to explain what they imply &mdash; instantly.</h1>
+      <p class="text-[var(--mute)] mt-4 text-[17px]">No hype, no guarantees. Just the maths behind the odds.</p>
+      <div class="flex flex-wrap gap-2 mt-4">
+        <span class="chip">${ic('zap', 'text-purple-600')} Quick read</span>
+        <span class="chip">${ic('percent', 'text-purple-600')} Margin shown</span>
+        <span class="chip" style="background:#fef2f2;color:#b91c1c;border-color:#fecaca">${ic('ban')} 18+ ONLY</span>
+      </div>
+      <div class="flex items-center gap-3 mt-7 flex-wrap">
+        <a href="#/register" class="btn btn-primary">GET STARTED ${ic('wand-sparkles')}</a>
+        <a href="#/login" class="btn btn-ghost">${ic('log-in')} SIGN IN</a>
+        <a href="#how" data-action="scroll" data-target="how" class="font-semibold text-[var(--mute)] flex items-center gap-1">See how it works ${ic('chevron-right')}</a>
+      </div>
+      <div class="grid grid-cols-3 gap-3 mt-8">
+        ${[['layers', '#f5f3ff', '#7c3aed', '7', 'LEAGUES'], ['percent', '#fffbeb', '#d97706', 'Margin', 'REVEALED'], ['dices', '#ecfdf5', '#059669', 'Random', 'OUTCOMES']]
+          .map(([i, bg, c, n, l], k) => `<div class="card py-4 text-center ${k === 1 ? '!bg-purple-50 !border-purple-200' : ''}"><div class="w-10 h-10 mx-auto rounded-xl flex items-center justify-center" style="background:${bg};color:${c}">${ic(i)}</div><div class="font-display font-bold text-lg mt-2">${n}</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)]">${l}</div></div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <section class="wrap mt-10">
+    <div class="rounded-[28px] p-5 text-center" style="background:linear-gradient(180deg,#ecfdf5,#d1fae5);border:1.5px solid #a7f3d0">
+      <span class="chip" style="background:#fff;color:#047857;border-color:#a7f3d0">${ic('brain')} ODDS READER PREVIEW</span>
+      <h2 class="font-display font-bold text-2xl mt-3 text-emerald-900">Instant Football Fixture Scanner</h2>
+      <p class="text-emerald-800 text-[15px] mt-2">Take a screenshot of your match lobby (like below) and the reader pulls out every fixture and its odds in seconds.</p>
+      <div class="relative mx-auto mt-5 w-40 h-64 rounded-[22px] p-1.5 bg-slate-800 shadow-xl" style="transform:rotate(4deg)">
+        <div class="h-full rounded-[16px] bg-slate-900 overflow-hidden">
+          <div class="h-6 bg-red-600"></div>
+          ${[0, 1, 2, 3, 4].map(() => `<div class="px-2 py-2 border-b border-slate-800"><div class="h-1.5 w-16 rounded bg-slate-600 mb-1.5"></div><div class="flex gap-1">${[0, 1, 2].map(() => '<div class="flex-1 h-4 rounded bg-slate-700"></div>').join('')}</div></div>`).join('')}
+        </div>
+      </div>
+      <div class="inline-flex items-center gap-2 bg-slate-900 text-white text-xs font-semibold rounded-full px-3 py-2 -mt-3 relative"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>Reads: England, Spain, Germany &amp; more</div>
+      <div class="mt-4"><a href="#/predict" class="btn btn-green">${ic('wand-sparkles')} TRY THE ODDS READER ${ic('arrow-right')}</a></div>
+    </div>
+  </section>
+
+  <section id="how" class="wrap mt-8">
+    <div class="rounded-[28px] p-5" style="background:#f8fafc;border:1.5px solid var(--line)">
+      <div class="eyebrow">${ic('route')} PROCESS</div>
+      <h2 class="font-display font-bold text-3xl mt-1">How it works</h2>
+      <p class="text-[var(--mute)] mt-1">4 simple steps.</p>
+      <div class="mt-4 space-y-3">
+        ${[['gamepad-2', '#f5f3ff', '#7c3aed', 'Open Instant Football', 'Go to the Instant Football virtual games lobby on your device.'],
+           ['camera', '#f5f3ff', '#7c3aed', 'Take a screenshot', 'Capture the matches displayed on your screen.'],
+           ['cpu', '#f5f3ff', '#7c3aed', 'Upload for analysis', 'The AI reads the fixtures and odds, then works out the implied probabilities.'],
+           ['circle-check', '#ecfdf5', '#059669', 'View your results', 'See each match broken down, with the bookmaker margin and a reminder that outcomes are random.']]
+          .map(([i, bg, c, t, d], k) => `<div class="card p-4 flex gap-3 items-center"><span class="font-display font-bold text-slate-400 w-6">0${k + 1}</span><div class="w-12 h-12 rounded-2xl flex-none flex items-center justify-center" style="background:${bg};color:${c}">${ic(i, 'i-lg')}</div><div><div class="font-display font-bold">${t}</div><p class="text-sm text-[var(--mute)]">${d}</p></div></div>`).join('')}
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap mt-10">
+    <div class="eyebrow">${ic('messages-square')} WHAT YOU GET</div>
+    <h2 class="font-display font-bold text-3xl mt-1">Honest by design</h2>
+    <div class="card mt-4 py-4 grid grid-cols-3 text-center divide-x divide-[var(--line)]">
+      <div><div class="font-display font-bold text-xl">1X2</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)]">MARKETS READ</div></div>
+      <div><div class="font-display font-bold text-xl">Local</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)]">MATHS</div></div>
+      <div><div class="font-display font-bold text-xl">0</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)]">GUARANTEES</div></div>
+    </div>
+    <div class="mt-3 space-y-3">
+      ${[['scan-text', '#7c3aed', 'Reads the screenshot for you', 'Teams, leagues and odds are pulled from the image so you do not have to type them in.'],
+         ['percent', '#d97706', 'Shows the bookmaker margin', 'Odds always add up to more than 100%. You see exactly how much, per match.'],
+         ['chart-pie', '#059669', 'Converts odds to probabilities', 'Home, Draw and Away are shown as fair percentages after removing the margin.'],
+         ['dices', '#db2777', 'Reminds you it is random', 'A favourite can lose. Every result page says so, because it is true.']]
+        .map(([i, c, t, d]) => `<div class="card p-4 flex gap-3"><div class="w-11 h-11 rounded-full flex-none flex items-center justify-center text-white" style="background:${c}">${ic(i)}</div><div><div class="font-display font-bold">${t}</div><p class="text-sm text-[var(--mute)] mt-1">${d}</p></div></div>`).join('')}
+    </div>
+  </section>
+
+  <section class="wrap mt-8">
+    <div class="dark-card p-4 flex items-center gap-3" style="border:1px solid #334155">
+      <div class="w-14 h-14 rounded-2xl flex-none grad flex items-center justify-center">${ic('trophy', 'i-lg')}</div>
+      <div class="flex-1 min-w-0">
+        <div class="flex gap-2 text-[11px] font-bold"><span class="px-2 py-0.5 rounded bg-red-500/20 text-red-300">SPORTYBET</span><span class="text-sky-300">Games lobby</span></div>
+        <div class="font-display font-bold mt-1">Play on SportyBet Virtuals</div>
+        <p class="text-xs text-slate-400">Opens in a new tab. We are not affiliated with SportyBet.</p>
+      </div>
+      <a href="${CONFIG.lobbyUrl}" target="_blank" rel="noopener" class="w-11 h-11 rounded-full bg-red-500 flex items-center justify-center flex-none" aria-label="Open SportyBet">${ic('external-link')}</a>
+    </div>
+    <div class="dark-card p-6 mt-4 text-center">
+      <h3 class="font-display font-bold text-2xl">Ready to read the odds?</h3>
+      <p class="text-slate-300 text-[15px] mt-2">Create a free account and get ${CONFIG.signupCoins} coins to try your first reads.</p>
+      <a href="#/register" class="btn btn-primary w-full mt-5">GET STARTED &mdash; FREE ${ic('arrow-right')}</a>
+      <p class="text-sm text-slate-400 mt-4">Already have an account? <a href="#/login" class="text-purple-300 font-bold underline">Log in</a></p>
+    </div>
+  </section>
+  ${aboutBlock()}${footer()}`;
+
+function field(label, name, type = 'text', ph = '', extra = '') {
+  return `<div><label class="label" for="${name}">${label}</label><input class="input" id="${name}" name="${name}" type="${type}" placeholder="${ph}" ${extra}></div>`;
 }
-$('history').addEventListener('click', e => {
-  const b = e.target.closest('[data-h]'); if (!b) return;
-  matches = loadHist()[b.dataset.h].m; renderEditor(); go('predictions');
+function phoneField(label, name, ph) {
+  return `<div><label class="label" for="${name}">${label}</label><div class="flex"><span class="flex items-center gap-1 px-3 rounded-l-[14px] border-[1.5px] border-r-0 border-[var(--line)] bg-slate-50 text-sm font-bold">+233</span><input class="input !rounded-l-none" id="${name}" name="${name}" type="tel" inputmode="tel" placeholder="${ph}"></div></div>`;
+}
+
+V.register = () => `${head('#/')}
+  <main class="wrap pb-12">
+    <h1 class="font-display font-bold text-3xl mt-2">Create account</h1>
+    <p class="text-[var(--mute)] mt-1">Currency: Ghana Cedi (GH\u20B5). You get ${CONFIG.signupCoins} free coins on sign-up.</p>
+    <form data-form="register" class="card p-5 mt-5 space-y-4" novalidate>
+      ${field('First name', 'first', 'text', 'Kwame', 'autocomplete="given-name"')}
+      ${field('Other name (optional)', 'other', 'text', '', 'autocomplete="additional-name"')}
+      ${field('Surname', 'last', 'text', 'Mensah', 'autocomplete="family-name"')}
+      ${field('Email address', 'email', 'email', 'you@example.com', 'autocomplete="email"')}
+      ${phoneField('Phone number', 'phone', '24 123 4567')}
+      ${field('Password (min 6 characters)', 'password', 'password', '', 'autocomplete="new-password"')}
+      ${field('Confirm password', 'confirm', 'password', '', 'autocomplete="new-password"')}
+      ${field('Referral code (optional)', 'referral', 'text', '')}
+      <label class="flex gap-3 items-start text-sm"><input type="checkbox" name="terms" class="mt-1 w-4 h-4 accent-purple-600"> <span>I agree to the Terms &amp; Conditions and confirm I am 18 or older.</span></label>
+      <p id="formErr" class="text-sm font-semibold text-red-600 hidden"></p>
+      <button class="btn btn-primary w-full" type="submit">Create Account</button>
+    </form>
+    <p class="text-center text-sm text-[var(--mute)] mt-5">Already registered? <a href="#/login" class="font-bold text-purple-700">Sign in</a></p>
+  </main>`;
+
+V.login = () => `${head('#/')}
+  <main class="wrap pb-12">
+    <h1 class="font-display font-bold text-3xl mt-2">Welcome back</h1>
+    <p class="text-[var(--mute)] mt-1">Sign in with your phone number or email.</p>
+    <form data-form="login" class="card p-5 mt-5 space-y-4" novalidate>
+      ${field('Phone number or email address', 'identifier', 'text', '24 123 4567 or you@example.com', `autocomplete="username" value="${esc(Store.rememberedLogin())}"`)}
+      <div><div class="flex justify-between items-center"><label class="label" for="password">Password</label><button type="button" data-action="forgot" class="text-xs font-bold text-purple-700 mb-1.5">FORGOT</button></div><input class="input" id="password" name="password" type="password" autocomplete="current-password"></div>
+      <label class="flex gap-3 items-center text-sm font-semibold"><input type="checkbox" name="remember" ${Store.rememberedLogin() ? 'checked' : ''} class="w-4 h-4 accent-purple-600"> Remember me</label>
+      <p id="formErr" class="text-sm font-semibold text-red-600 hidden"></p>
+      <button class="btn btn-primary w-full" type="submit">Sign in</button>
+    </form>
+    <div id="forgotBox" class="card p-5 mt-4 hidden">
+      <div class="font-display font-bold">Reset password</div>
+      <p class="text-sm text-[var(--mute)] mt-1">Password resets are sent by email only. Enter the email on your account.</p>
+      <input id="resetEmail" class="input mt-3" type="email" placeholder="you@example.com">
+      <button data-action="reset" class="btn btn-primary w-full mt-3">Send reset link</button>
+    </div>
+    <p class="text-center text-sm text-[var(--mute)] mt-5">New here? <a href="#/register" class="font-bold text-purple-700">Create an account</a></p>
+  </main>`;
+
+function nav(active) {
+  const items = [['dashboard', 'Home', 'house'], ['packages', 'Packages', 'package'], ['predict', 'Predictions', 'scan-line'], ['guide', 'Guide', 'book-open'], ['about', 'About', 'info'], ['profile', 'Profile', 'user-round']];
+  return `<nav class="nav flex" aria-label="Main">${items.map(([r, l, i]) => `<a href="#/${r}" class="${active === r ? 'on' : ''}"><span class="pill">${ic(i)}</span>${l}</a>`).join('')}</nav>`;
+}
+function pageTitle(t, sub) { return `<div class="wrap pt-6"><h1 class="font-display font-bold text-3xl">${t}</h1>${sub ? `<p class="text-[var(--mute)] mt-1">${sub}</p>` : ''}</div>`; }
+function walletCard(u) {
+  return `<div class="rounded-[26px] p-5 text-white relative overflow-hidden" style="background:linear-gradient(135deg,#a855f7,#6d28d9)">
+    <div class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10"></div>
+    <div class="flex justify-between items-start relative">
+      <div><div class="text-sm opacity-80 flex items-center gap-1">${ic('wallet')} Spendable wallet balance</div><div class="font-display font-bold text-4xl mt-1">${money(u.wallet.cash)}</div></div>
+      <a href="#/deposit" class="btn !py-2.5 !px-4 bg-white text-purple-700 text-sm">${ic('plus')} Deposit</a>
+    </div>
+    <div class="grid grid-cols-2 gap-3 mt-5 relative">
+      <div class="rounded-2xl bg-white/15 p-3"><div class="text-xs opacity-80 flex items-center gap-1">${ic('coins')} Coins</div><div class="font-display font-bold text-xl">${u.wallet.coins.toLocaleString()}</div></div>
+      <div class="rounded-2xl bg-white/15 p-3"><div class="text-xs opacity-80 flex items-center gap-1">${ic('gem')} VIP diamonds</div><div class="font-display font-bold text-xl">${u.wallet.diamonds.toLocaleString()}</div></div>
+    </div>
+    <a href="#/packages" class="btn w-full mt-4 bg-white/20 text-white text-sm !py-3 relative">Get tokens ${ic('plus')}</a>
+  </div>`;
+}
+
+V.dashboard = u => `
+  <div class="wrap pt-5 flex items-center justify-between">
+    <div><div class="text-sm text-[var(--mute)]">Hello</div><div class="font-display font-bold text-2xl">Welcome ${esc(u.first)}!</div></div>
+    <button class="relative w-11 h-11 rounded-full border border-[var(--line)] flex items-center justify-center" data-action="bell" aria-label="Notifications">${ic('bell')}${u.tx.some(t => t.status === 'pending') ? '<span class="absolute top-2 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full"></span>' : ''}</button>
+  </div>
+  <div class="wrap mt-4">${walletCard(u)}</div>
+  <div class="wrap mt-4 grid grid-cols-3 gap-3">
+    ${[['scan-line', u.scans.length, 'Reads done'], ['coins', u.scans.reduce((a, s) => a + (s.tier === 'standard' ? CONFIG.scanCost.standard.coins : 0), 0), 'Coins used'], ['receipt', u.tx.filter(t => t.status === 'successful' && t.type === 'deposit').length, 'Deposits']]
+      .map(([i, n, l]) => `<div class="card py-4 text-center"><div class="text-purple-600 flex justify-center">${ic(i)}</div><div class="font-display font-bold text-xl mt-1">${n}</div><div class="text-[11px] font-semibold text-[var(--mute)]">${l}</div></div>`).join('')}
+  </div>
+  <section class="wrap mt-6">
+    <h2 class="font-display font-bold text-xl mb-3">Available tools</h2>
+    <a href="#/predict" class="card p-4 flex items-center gap-4 block"><div class="w-14 h-14 rounded-2xl grad text-white flex items-center justify-center flex-none">${ic('scan-line', 'i-lg')}</div><div class="flex-1"><div class="font-display font-bold">Instant Virtuals odds reader</div><p class="text-sm text-[var(--mute)]">Upload a lobby screenshot and see implied probabilities and margin.</p></div>${ic('chevron-right', 'text-slate-400')}</a>
+    <div class="card p-4 flex items-center gap-4 mt-3 opacity-70"><div class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center flex-none">${ic('refresh-cw', 'i-lg')}</div><div class="flex-1"><div class="font-display font-bold">Spin the Bottle</div><p class="text-sm text-[var(--mute)]">Coming soon.</p></div><span class="chip text-xs">SOON</span></div>
+  </section>
+  <section class="wrap mt-6 grid grid-cols-3 gap-3">
+    ${[['circle-help', 'How to play', '#/guide'], ['message-square', 'Feedback', 'mailto:' + CONFIG.support.email + '?subject=Feedback'], ['flag', 'Report issue', 'mailto:' + CONFIG.support.email + '?subject=Issue']]
+      .map(([i, l, h]) => `<a href="${h}" class="card py-4 text-center text-sm font-bold"><div class="text-purple-600 flex justify-center mb-1">${ic(i)}</div>${l}</a>`).join('')}
+  </section>
+  <section class="wrap mt-6">
+    <div class="card p-5">
+      <div class="font-display font-bold flex items-center gap-2 mb-3">${ic('lightbulb', 'text-amber-500')} Money-management reminders</div>
+      <ul class="text-sm text-slate-700 space-y-2.5">
+        <li class="flex gap-2">${ic('check', 'text-emerald-600 flex-none mt-0.5')} Set a budget before you play and stop when you reach it.</li>
+        <li class="flex gap-2">${ic('check', 'text-emerald-600 flex-none mt-0.5')} A short price does not mean a certain win. Favourites lose often.</li>
+        <li class="flex gap-2">${ic('check', 'text-emerald-600 flex-none mt-0.5')} Never chase losses with bigger stakes.</li>
+      </ul>
+    </div>
+    <div class="dark-card p-4 mt-4 flex items-center gap-3">
+      <div class="flex-1"><div class="text-[11px] font-bold text-red-300">SPORTYBET GAMES LOBBY</div><div class="font-display font-bold">Open SportyBet Virtuals</div><p class="text-xs text-slate-400">Opens in a new tab. Not affiliated.</p></div>
+      <a href="${CONFIG.lobbyUrl}" target="_blank" rel="noopener" class="w-11 h-11 rounded-full bg-red-500 flex items-center justify-center" aria-label="Open SportyBet">${ic('external-link')}</a>
+    </div>
+  </section>
+  <div class="h-28"></div>`;
+
+let packTab = 'coins';
+V.packages = u => {
+  const list = packTab === 'coins' ? CONFIG.coinPacks : CONFIG.diamondPacks;
+  return `${pageTitle('Packages', 'Pay for reads with coins or VIP diamonds. They do not change any odds or results.')}
+  <div class="wrap mt-4">${walletCard(u)}</div>
+  <div class="wrap mt-5"><div class="grid grid-cols-2 gap-2 p-1.5 rounded-full bg-slate-100">
+    <button data-action="packtab" data-v="coins" class="btn !py-2.5 ${packTab === 'coins' ? 'btn-primary' : '!bg-transparent text-slate-600'}">${ic('coins')} Coin packages</button>
+    <button data-action="packtab" data-v="diamonds" class="btn !py-2.5 ${packTab === 'diamonds' ? 'btn-primary' : '!bg-transparent text-slate-600'}">${ic('gem')} Diamonds (VIP)</button>
+  </div></div>
+  <div class="wrap mt-4 space-y-3">${list.map(p => `
+    <div class="card p-4 ${p.popular ? '!border-purple-400' : ''} relative">
+      ${p.popular ? '<span class="absolute -top-3 right-5 text-xs font-bold text-white grad px-3 py-1 rounded-full">Popular</span>' : ''}
+      <div class="flex items-center gap-4">
+        <div class="w-14 h-14 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic(packTab === 'coins' ? 'coins' : 'gem', 'i-lg')}</div>
+        <div class="flex-1"><div class="font-display font-bold">${p.name}</div><p class="text-sm text-[var(--mute)]">${packTab === 'coins' ? p.coins.toLocaleString() + ' coins' : p.diamonds + ' diamonds'}</p></div>
+        <div class="font-display font-bold text-lg">${money(p.price)}</div>
+      </div>
+      <button data-action="buy" data-id="${p.id}" class="btn btn-primary w-full mt-3 !py-3">Buy with wallet balance</button>
+    </div>`).join('')}</div>
+  <p class="wrap text-xs text-[var(--mute)] mt-4">Reads cost ${CONFIG.scanCost.standard.coins} coins (standard) or ${CONFIG.scanCost.detailed.diamonds} diamond (detailed). Need wallet funds? <a href="#/deposit" class="font-bold text-purple-700">Deposit via MoMo</a>.</p>
+  <div class="h-28"></div>`;
+};
+
+let depNetwork = 'MTN MoMo';
+V.deposit = u => {
+  const pend = u.tx.find(t => t.type === 'deposit' && t.status === 'pending');
+  const acct = CONFIG.momo[depNetwork];
+  return `${head('#/dashboard')}
+  <main class="wrap pb-32">
+    <h1 class="font-display font-bold text-3xl">Deposit</h1>
+    <p class="text-[var(--mute)] mt-1">Pay by mobile money, then tell us once you have sent it.</p>
+    ${pend ? `<div class="card p-5 mt-5 !border-amber-300 !bg-amber-50">
+      <div class="flex items-center gap-2 font-display font-bold text-amber-800">${ic('clock')} Awaiting admin confirmation</div>
+      <p class="text-sm text-amber-900 mt-2">${money(pend.amount)} via ${esc(pend.network)} from ${esc(pend.senderName)} (${esc(pend.senderNumber)}). Reference <b>${pend.id}</b>.</p>
+      <ol class="text-sm mt-3 space-y-2">
+        <li class="flex gap-2 items-center text-emerald-700">${ic('circle-check')} Payment reported</li>
+        <li class="flex gap-2 items-center text-amber-800">${ic('loader', 'spin')} Admin checking your MoMo receipt</li>
+        <li class="flex gap-2 items-center text-slate-400">${ic('circle')} Wallet credited</li>
+      </ol>
+      ${CONFIG.demoMode ? `<div class="flex gap-2 mt-4"><button data-action="txstatus" data-id="${pend.id}" data-v="successful" class="btn btn-green !py-2.5 flex-1 text-sm">Demo: confirm</button><button data-action="txstatus" data-id="${pend.id}" data-v="failed" class="btn btn-ghost !py-2.5 flex-1 text-sm">Demo: reject</button></div>` : ''}
+    </div>` : ''}
+    <div class="card p-5 mt-5 space-y-4">
+      <div><span class="label">1. Choose network</span>
+        <div class="grid grid-cols-3 gap-2">${Object.keys(CONFIG.momo).map(n => `<button data-action="network" data-v="${n}" class="rounded-2xl py-3 text-xs font-bold border-[1.5px] ${depNetwork === n ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-[var(--line)]'}">${n}</button>`).join('')}</div></div>
+      <div class="rounded-2xl bg-slate-50 p-4 text-sm"><div class="text-[var(--mute)]">Send to</div><div class="font-display font-bold text-lg">${acct.number}</div><div class="text-slate-600">${acct.name}</div></div>
+      <div><label class="label" for="depAmount">2. Amount (GH\u20B5)</label><input id="depAmount" class="input" type="number" min="1" inputmode="decimal" placeholder="100"></div>
+      ${phoneField('3. Sender MoMo number', 'depSender', '24 123 4567')}
+      <div><label class="label" for="depName">Sender MoMo name</label><input id="depName" class="input" placeholder="Name on the MoMo account"></div>
+      <p id="formErr" class="text-sm font-semibold text-red-600 hidden"></p>
+      <button data-action="paid" class="btn btn-primary w-full" ${pend ? 'disabled' : ''}>${ic('check')} I Have Paid</button>
+    </div>
+  </main>${nav('')}`;
+};
+
+let scan = { dataUrl: null, tier: 'standard', result: null, busy: false, error: '', tab: 'instant' };
+function resultCard(m, detailed) {
+  const a = Odds.analyse(m);
+  if (!a) return `<div class="card p-4 text-sm text-[var(--mute)]">${esc(m.home)} vs ${esc(m.away)}: odds were not readable.</div>`;
+  const cols = ['#7c3aed', '#94a3b8', '#db2777'], lbl = ['Home', 'Draw', 'Away'];
+  return `<div class="card p-4">
+    <div class="flex justify-between items-start gap-2"><div><div class="font-display font-bold">${esc(m.home)} <span class="text-slate-400 font-medium">vs</span> ${esc(m.away)}</div>${m.league ? `<div class="text-xs text-[var(--mute)]">${esc(m.league)}</div>` : ''}</div>
+      <span class="chip text-xs">${ic('trending-down')} Shortest price: ${a.fav}</span></div>
+    <div class="mt-3 space-y-2.5">${lbl.map((l, i) => `<div><div class="flex justify-between text-sm font-semibold"><span>${l} <span class="text-[var(--mute)] font-medium">@ ${a.odds[i].toFixed(2)}</span></span><span>${a.p[i].toFixed(1)}%</span></div><div class="bar mt-1"><span style="width:${a.p[i]}%;background:${cols[i]}"></span></div></div>`).join('')}</div>
+    ${detailed ? `<div class="mt-3 pt-3 border-t border-[var(--line)] text-sm space-y-1.5">
+      <div class="flex justify-between"><span class="text-[var(--mute)]">Bookmaker margin (1X2)</span><b>${a.margin.toFixed(1)}%</b></div>
+      ${a.ou ? `<div class="flex justify-between"><span class="text-[var(--mute)]">Over ${a.ou.line}</span><b>${a.ou.over.toFixed(1)}%</b></div><div class="flex justify-between"><span class="text-[var(--mute)]">Under ${a.ou.line}</span><b>${a.ou.under.toFixed(1)}%</b></div>` : '<div class="text-[var(--mute)]">No over/under market visible.</div>'}
+      <p class="text-xs text-[var(--mute)] pt-1">Probabilities are fair-price estimates after removing the margin. They describe the odds, not the result.</p></div>` : ''}
+  </div>`;
+}
+
+V.predict = u => {
+  const cost = CONFIG.scanCost;
+  return `${pageTitle('Predictions', 'Upload a lobby screenshot to read the odds.')}
+  <div class="wrap mt-4"><div class="grid grid-cols-3 gap-2 p-1.5 rounded-full bg-slate-100">
+    <button class="btn !py-2.5 text-sm btn-primary">Instant</button>
+    <button data-action="soon" class="btn !py-2.5 text-sm !bg-transparent text-slate-500">Spin Bottle</button>
+    <button data-action="soon" class="btn !py-2.5 text-sm !bg-transparent text-slate-500">Aviator <span class="text-[9px] bg-slate-200 px-1.5 rounded">SOON</span></button>
+  </div></div>
+  <div class="wrap mt-4">
+    <span class="label">Choose read type</span>
+    <div class="grid grid-cols-2 gap-3">
+      <button data-action="tier" data-v="standard" class="card p-4 text-left ${scan.tier === 'standard' ? '!border-purple-500 !bg-purple-50' : ''}"><div class="font-display font-bold flex items-center gap-2">${ic('coins', 'text-amber-600')} Standard</div><p class="text-xs text-[var(--mute)] mt-1">Odds and implied probabilities</p><div class="font-bold text-sm mt-2">${cost.standard.coins} coins</div></button>
+      <button data-action="tier" data-v="detailed" class="card p-4 text-left ${scan.tier === 'detailed' ? '!border-purple-500 !bg-purple-50' : ''}"><div class="font-display font-bold flex items-center gap-2">${ic('gem', 'text-sky-600')} Detailed</div><p class="text-xs text-[var(--mute)] mt-1">Adds margin and over/under</p><div class="font-bold text-sm mt-2">${cost.detailed.diamonds} diamond</div></button>
+    </div>
+    <div class="text-xs text-[var(--mute)] mt-2">Balance: ${u.wallet.coins} coins &middot; ${u.wallet.diamonds} diamonds</div>
+  </div>
+  <div class="wrap mt-4">
+    ${scan.busy ? `<div class="card p-6 text-center">
+        <div class="w-14 h-14 mx-auto grad rounded-2xl flex items-center justify-center text-white">${ic('scan-line', 'i-lg')}</div>
+        <div class="font-display font-bold mt-3">Claude vision reader active</div>
+        <p id="scanStatus" class="text-sm text-[var(--mute)] mt-1">Uploading screenshot</p>
+        <div class="bar mt-4"><span id="scanBar" class="grad" style="width:0%"></span></div>
+        <div id="scanPct" class="text-sm font-bold mt-2">0%</div></div>`
+    : `<label id="drop" class="drop block p-6 text-center cursor-pointer" for="file">
+        ${scan.dataUrl ? `<img src="${scan.dataUrl}" alt="Selected screenshot" class="max-h-64 mx-auto rounded-xl">` : `<div class="w-14 h-14 mx-auto rounded-2xl bg-white text-purple-600 flex items-center justify-center shadow">${ic('image-up', 'i-lg')}</div><div class="font-display font-bold mt-3">Upload match screenshot</div><p class="text-sm text-[var(--mute)] mt-1">Drag and drop, or tap to pick from your gallery.<br>PNG, JPG or WEBP</p>`}
+        <input id="file" type="file" accept="image/png,image/jpeg,image/webp" class="hidden"></label>
+      ${scan.error ? `<p class="text-sm font-semibold text-red-600 mt-3">${esc(scan.error)}</p>` : ''}
+      <button data-action="scan" class="btn btn-primary w-full mt-4" ${scan.dataUrl ? '' : 'disabled'}>${ic('wand-sparkles')} Read the odds</button>
+      ${scan.dataUrl ? '<button data-action="clearimg" class="btn btn-ghost w-full mt-2 !py-3 text-sm">Remove screenshot</button>' : ''}`}
+  </div>
+  ${scan.result ? `<section class="wrap mt-6 space-y-3">
+    <h2 class="font-display font-bold text-xl">Results (${scan.result.matches.length} matches)</h2>
+    ${scan.result.matches.map(m => resultCard(m, scan.resultTier === 'detailed')).join('')}
+    <div class="rounded-2xl p-4 text-sm" style="background:#fffbeb;border:1.5px solid #fde68a;color:#78350f">${ic('triangle-alert', 'inline mr-1')} <b>Outcomes are random.</b> The shortest price loses often. These figures describe the odds, not the result. Only stake what you can afford to lose.</div>
+  </section>` : ''}
+  <div class="h-28"></div>`;
+};
+
+V.guide = u => `${u ? pageTitle('Guide', 'How to use the odds reader and read the results.') : head('#/') + '<div class="wrap"><h1 class="font-display font-bold text-3xl">Guide</h1></div>'}
+  <div class="wrap mt-4 space-y-3 pb-32">
+    ${[['Take a clear screenshot', 'Open the Instant Football lobby and capture all the fixture rows with their odds visible. Avoid glare and cropping.'],
+       ['Upload it', 'Go to Predictions, choose Standard or Detailed, and upload the image. Reads that fail are not charged.'],
+       ['Understand the percentages', 'Odds of 2.00 imply 50% before the margin. Because every bookmaker builds in a margin, the raw numbers add up to more than 100%. We remove it to show fair percentages.'],
+       ['Remember it is random', 'Virtual results are generated randomly. A 60% favourite still loses 4 times out of 10.'],
+       ['Stay in control', 'Set a budget, take breaks, and never bet money you need for bills.']]
+      .map(([t, d], k) => `<div class="card p-4 flex gap-3"><span class="font-display font-bold text-purple-600">${k + 1}</span><div><div class="font-display font-bold">${t}</div><p class="text-sm text-[var(--mute)] mt-1">${d}</p></div></div>`).join('')}
+  </div>${u ? nav('guide') : ''}`;
+
+V.about = u => `${u ? '' : head('#/')}<div class="pb-28">${aboutBlock()}${footer()}</div>${u ? nav('about') : ''}`;
+
+let txFilter = 'all';
+V.profile = u => {
+  const list = u.tx.filter(t => txFilter === 'all' || t.status === txFilter);
+  return `${pageTitle('Profile')}
+  <div class="wrap mt-4">
+    <div class="card p-5">
+      <div class="flex items-center gap-4"><div class="w-16 h-16 rounded-full grad text-white flex items-center justify-center font-display font-bold text-2xl">${esc(u.first[0] + u.last[0])}</div>
+        <div><div class="font-display font-bold text-xl">${esc([u.first, u.other, u.last].filter(Boolean).join(' '))}</div><span class="chip text-xs !bg-emerald-50 !text-emerald-700 !border-emerald-200">${ic('badge-check')} Active member</span></div></div>
+      <dl class="mt-4 text-sm space-y-2.5">
+        <div class="flex justify-between"><dt class="text-[var(--mute)]">Email</dt><dd class="font-semibold">${esc(u.email)}</dd></div>
+        <div class="flex justify-between"><dt class="text-[var(--mute)]">Phone</dt><dd class="font-semibold">+233 ${esc(u.phone)}</dd></div>
+        <div class="flex justify-between"><dt class="text-[var(--mute)]">Account type</dt><dd class="font-semibold">Standard</dd></div>
+        <div class="flex justify-between"><dt class="text-[var(--mute)]">Your referral code</dt><dd class="font-semibold">${u.refCode}</dd></div>
+        <div class="flex justify-between"><dt class="text-[var(--mute)]">Referred by</dt><dd class="font-semibold">${u.referredBy || 'None'}</dd></div>
+      </dl>
+    </div>
+    <div class="card p-5 mt-4">
+      <div class="font-display font-bold flex items-center gap-2">${ic('key-round', 'text-purple-600')} Settings: Claude API key</div>
+      <p class="text-xs text-[var(--mute)] mt-1">Stored only in this browser. For a public launch, use a server proxy (see <code>CONFIG.proxyUrl</code>) so the key is never exposed.</p>
+      <input id="apiKey" type="password" class="input mt-3" placeholder="sk-ant-..." value="${esc(Store.apiKey())}">
+      <div class="flex gap-2 mt-3"><button data-action="savekey" class="btn btn-primary flex-1 !py-3 text-sm">Save key</button><button data-action="clearkey" class="btn btn-ghost !py-3 text-sm">Clear</button></div>
+    </div>
+    <div class="card p-5 mt-4">
+      <div class="font-display font-bold flex items-center gap-2 mb-3">${ic('receipt', 'text-purple-600')} Payment &amp; deposit history</div>
+      <div class="flex gap-2 overflow-x-auto pb-2">${['all', 'pending', 'successful', 'failed'].map(f => `<button data-action="filter" data-v="${f}" class="chip capitalize flex-none ${txFilter === f ? '!bg-purple-600 !text-white !border-purple-600' : ''}">${f}</button>`).join('')}</div>
+      <div class="mt-2 divide-y divide-[var(--line)]">
+        ${list.length ? list.map(t => `<div class="py-3 flex items-center gap-3"><div class="flex-1 min-w-0"><div class="font-semibold text-sm truncate">${esc(t.label)}</div><div class="text-xs text-[var(--mute)]">${t.id} &middot; ${fmtDate(t.ts)}</div>
+          ${CONFIG.demoMode && t.status === 'pending' ? `<div class="flex gap-3 mt-1 text-xs font-bold"><button data-action="txstatus" data-id="${t.id}" data-v="successful" class="text-emerald-700">Confirm (demo)</button><button data-action="txstatus" data-id="${t.id}" data-v="failed" class="text-red-600">Reject (demo)</button></div>` : ''}</div>
+          <div class="text-right"><div class="font-bold text-sm">${t.amount < 0 ? '-' : '+'}${money(Math.abs(t.amount))}</div><span class="status-${t.status} text-[11px] font-bold px-2 py-0.5 rounded-full capitalize">${t.status}</span></div></div>`).join('') : '<p class="text-sm text-[var(--mute)] py-4 text-center">No transactions yet.</p>'}
+      </div>
+    </div>
+    <div class="card p-5 mt-4">
+      <div class="font-display font-bold flex items-center gap-2 mb-2">${ic('history', 'text-purple-600')} Recent reads</div>
+      ${u.scans.length ? u.scans.slice(0, 5).map(s => `<div class="flex justify-between text-sm py-2 border-b border-[var(--line)] last:border-0"><span>${s.matches} matches &middot; ${s.tier}</span><span class="text-[var(--mute)]">${fmtDate(s.ts)}</span></div>`).join('') : '<p class="text-sm text-[var(--mute)]">No reads yet.</p>'}
+    </div>
+    <button data-action="logout" class="btn btn-ghost w-full mt-5 !text-red-600 !border-red-200">${ic('log-out')} Sign out of account</button>
+  </div><div class="h-28"></div>`;
+};
+
+/* =========================================================
+   Router
+   ========================================================= */
+const PROTECTED = ['dashboard', 'packages', 'deposit', 'predict', 'profile'];
+const GUEST_ONLY = ['login', 'register'];
+function render() {
+  const route = (location.hash.replace(/^#\/?/, '') || '').split('?')[0];
+  if (route === 'how') return;
+  const u = Store.me();
+  let name = route === '' ? 'landing' : route;
+  if (!V[name]) name = 'landing';
+  if (PROTECTED.includes(name) && !u) { location.hash = '#/login'; return; }
+  if (GUEST_ONLY.includes(name) && u) { location.hash = '#/dashboard'; return; }
+  if (name === 'landing' && u && !location.hash) { /* keep landing visible when logged in via home link */ }
+  const html = V[name](u);
+  const showNav = u && ['dashboard', 'packages', 'predict', 'profile'].includes(name);
+  $('#app').innerHTML = html + (showNav ? nav(name) : '');
+  lucide.createIcons();
+  window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', render);
+
+/* =========================================================
+   Events (delegated)
+   ========================================================= */
+function showErr(msg) { const e = $('#formErr'); if (e) { e.textContent = msg; e.classList.remove('hidden'); } }
+
+document.addEventListener('submit', async e => {
+  const form = e.target.closest('form[data-form]'); if (!form) return;
+  e.preventDefault();
+  const fd = new FormData(form), type = form.dataset.form;
+  try {
+    if (type === 'register') {
+      await Auth.register({ first: fd.get('first') || '', other: fd.get('other') || '', last: fd.get('last') || '', email: fd.get('email') || '', phone: fd.get('phone') || '', password: fd.get('password') || '', confirm: fd.get('confirm') || '', referral: fd.get('referral') || '', terms: !!fd.get('terms') });
+      toast('Account created. ' + CONFIG.signupCoins + ' free coins added.');
+    } else {
+      await Auth.login(fd.get('identifier') || '', fd.get('password') || '', !!fd.get('remember'));
+    }
+    location.hash = '#/dashboard'; render();
+  } catch (err) { showErr(String(err)); }
 });
-$('clearHist').onclick = () => { localStorage.removeItem(KEY); renderHist(); };
-renderHist();
+
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-action]'); if (!b) return;
+  const a = b.dataset.action, v = b.dataset.v, u = Store.me();
+  switch (a) {
+    case 'faq': b.closest('.faq').classList.toggle('open'); break;
+    case 'scroll': e.preventDefault(); document.getElementById(b.dataset.target)?.scrollIntoView({ behavior: 'smooth' }); break;
+    case 'forgot': $('#forgotBox').classList.toggle('hidden'); break;
+    case 'reset': {
+      const em = $('#resetEmail').value;
+      if (!/^\S+@\S+\.\S+$/.test(em)) return toast('Enter a valid email address.');
+      Auth.resetByEmail(em);
+      toast('If that email has an account, a reset link will be sent.'); break;
+    }
+    case 'bell': toast(u.tx.some(t => t.status === 'pending') ? 'You have a deposit awaiting confirmation.' : 'No new notifications.'); break;
+    case 'packtab': packTab = v; render(); break;
+    case 'buy': {
+      const pack = [...CONFIG.coinPacks, ...CONFIG.diamondPacks].find(p => p.id === b.dataset.id);
+      try { Wallet.buy(u, pack, packTab); toast(pack.name + ' purchased.'); render(); } catch (err) { toast(String(err)); }
+      break;
+    }
+    case 'network': depNetwork = v; render(); break;
+    case 'paid': {
+      try {
+        Wallet.startDeposit(u, { network: depNetwork, amount: $('#depAmount').value, senderNumber: $('#depSender').value, senderName: $('#depName').value });
+        toast('Payment reported. Awaiting admin confirmation.'); render();
+      } catch (err) { showErr(String(err)); }
+      break;
+    }
+    case 'txstatus': Wallet.setStatus(u, b.dataset.id, v); toast(v === 'successful' ? 'Deposit confirmed. Wallet credited.' : 'Deposit marked failed.'); render(); break;
+    case 'filter': txFilter = v; render(); break;
+    case 'savekey': Store.setApiKey($('#apiKey').value.trim()); toast('API key saved on this device.'); break;
+    case 'clearkey': Store.setApiKey(''); toast('API key removed.'); render(); break;
+    case 'logout': Auth.logout(); break;
+    case 'soon': toast('This tool is coming soon.'); break;
+    case 'tier': scan.tier = v; render(); break;
+    case 'clearimg': scan.dataUrl = null; scan.result = null; scan.error = ''; render(); break;
+    case 'scan': runScan(u); break;
+  }
+});
+
+async function loadFile(file) {
+  if (!file || !/^image\/(png|jpe?g|webp)$/.test(file.type)) return toast('Use a PNG, JPG or WEBP image.');
+  try { scan.dataUrl = await shrinkImage(file); scan.result = null; scan.error = ''; render(); } catch { toast('Could not open that image.'); }
+}
+document.addEventListener('change', e => { if (e.target.id === 'file') loadFile(e.target.files[0]); });
+document.addEventListener('dragover', e => { const d = e.target.closest('#drop'); if (d) { e.preventDefault(); d.classList.add('over'); } });
+document.addEventListener('dragleave', e => { const d = e.target.closest('#drop'); if (d) d.classList.remove('over'); });
+document.addEventListener('drop', e => { const d = e.target.closest('#drop'); if (d) { e.preventDefault(); d.classList.remove('over'); loadFile(e.dataTransfer.files[0]); } });
+
+async function runScan(u) {
+  const tier = scan.tier, cost = CONFIG.scanCost[tier];
+  if (tier === 'standard' && u.wallet.coins < cost.coins) { scan.error = 'Not enough coins. Buy a coins pack first.'; return render(); }
+  if (tier === 'detailed' && u.wallet.diamonds < cost.diamonds) { scan.error = 'Not enough diamonds. Buy a diamonds pack first.'; return render(); }
+  scan.busy = true; scan.error = ''; scan.result = null; render();
+  const phases = ['Uploading screenshot', 'Reading fixture rows', 'Extracting odds', 'Calculating implied probabilities'];
+  let pct = 0;
+  const timer = setInterval(() => {
+    pct = Math.min(90, pct + Math.random() * 6 + 2);
+    const bar = $('#scanBar'), p = $('#scanPct'), s = $('#scanStatus');
+    if (bar) bar.style.width = pct + '%'; if (p) p.textContent = Math.round(pct) + '%'; if (s) s.textContent = phases[Math.min(3, Math.floor(pct / 25))];
+  }, 350);
+  try {
+    const res = await callClaude(scan.dataUrl);
+    clearInterval(timer);
+    if (!res.matches || !res.matches.length) throw res.notes || 'No fixtures found in that image. You were not charged.';
+    const fresh = Store.me();
+    if (tier === 'standard') fresh.wallet.coins -= cost.coins; else fresh.wallet.diamonds -= cost.diamonds;
+    fresh.scans.unshift({ id: uid('S'), ts: Date.now(), tier, matches: res.matches.length });
+    fresh.scans = fresh.scans.slice(0, 20);
+    Store.saveUser(fresh);
+    scan.result = res; scan.resultTier = tier;
+  } catch (err) {
+    clearInterval(timer);
+    scan.error = (typeof err === 'string' ? err : (err.message || 'Something went wrong.')) + ' You were not charged.';
+  }
+  scan.busy = false; render();
+}
+
+render();
 </script>
 </body>
 </html>
