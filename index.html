@@ -13,6 +13,8 @@ tailwind.config = { theme: { extend: { fontFamily: { display: ['Outfit','sans-se
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lucide@latest"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://js.paystack.co/v2/inline.js"></script>
+<script src="config.js"></script>
 <style>
 :root{--p1:#a855f7;--p2:#7c3aed;--ink:#0f1226;--mute:#6b7280;--line:#e6e8f2;--soft:#f5f3ff}
 *{-webkit-tap-highlight-color:transparent}
@@ -67,15 +69,11 @@ html,body{background:#fff;color:var(--ink);font-family:'Plus Jakarta Sans',sans-
    CONFIG - fill in the Supabase values (the anon key is public by design).
    The Claude API key is NOT here. It lives in a Supabase Edge Function secret.
    ========================================================= */
-const CONFIG = {
+const CONFIG = window.CONFIG || {
   brand: 'INSTANTVIRTUALS',
   SUPABASE_URL: 'https://hyxrwhgakduytptasihp.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_lJKyhjDgsKNZATFaDDwgNg_6vwJ2V_n',
-  momo: {
-    'MTN MoMo':     { number: '054 459 6279', name: 'Butros Appiah' },
-    'Telecel Cash': { number: '050 006 6266', name: 'Butros Appiah' },
-  },
-  support: { email: 'support@yourdomain.com', whatsapp: '233533327517', telegram: '@VirtualOddsPrediction' },
+  support: { email: 'support@yourdomain.com', whatsapp: '233533327517', telegram: 'VirtualOddsPrediction' },
   lobbyUrl: 'https://www.sportybet.com/gh/'
 };
 const CONFIGURED = !CONFIG.SUPABASE_URL.includes('YOUR-PROJECT');
@@ -94,14 +92,14 @@ const TIERS = {
   ]
 };
 const COIN_PACKS = [
-  { id: 'starter', name: 'Starter Coins Pack', price: 350,  amount: '1,000 coins' },
-  { id: 'pro',     name: 'Pro Coins Pack',     price: 700,  amount: '2,500 coins', popular: true },
-  { id: 'mega',    name: 'Mega Coins Pack',    price: 1200, amount: '5,000 coins' }
+  { id: 'starter', name: 'Starter Coins Pack', price: 350,  desc: '1,000 coins. Enough for 1 Bronze reading.' },
+  { id: 'pro',     name: 'Pro Coins Pack',     price: 700,  desc: '2,500 coins. Enough for 1 Silver Pro reading.', popular: true },
+  { id: 'mega',    name: 'Mega Coins Pack',    price: 1200, desc: '5,000 coins. Enough for 1 Gold Ultra reading.' }
 ];
 const DIAMOND_PACKS = [
-  { id: 'd20', name: 'Silver Diamonds Pack', price: 500,  amount: '20 diamonds' },
-  { id: 'd40', name: 'Gold Diamonds Pack',   price: 1000, amount: '40 diamonds', popular: true },
-  { id: 'd80', name: 'Master Diamonds Pack', price: 2000, amount: '80 diamonds' }
+  { id: 'd20', name: 'Silver Diamonds Pack', price: 500,  desc: '20 diamonds. Enough for 1 Silver VIP reading.' },
+  { id: 'd40', name: 'Gold Diamonds Pack',   price: 1000, desc: '40 diamonds. Enough for 1 Gold VIP reading.', popular: true },
+  { id: 'd80', name: 'Master Diamonds Pack', price: 2000, desc: '80 diamonds. Enough for 1 Master VIP reading.' }
 ];
 
 /* =========================================================
@@ -146,19 +144,21 @@ async function callFn(name, body, authed = true) {
 /* =========================================================
    State and data
    ========================================================= */
-const state = { me: null, reviews: [], packTab: 'coins', depNetwork: 'MTN MoMo', txFilter: 'all', reviewRating: 0, reviewDraft: '' };
+const state = { me: null, members: null, reviews: [], packTab: 'coins', depNetwork: 'MTN MoMo', txFilter: 'all', reviewRating: 0, reviewDraft: '' };
 const P = { step: 'tiers', kind: 'coins', tier: null, dataUrl: null, error: '', scanId: null, fixtures: [], picks: [], allowed: 0, result: null, resultKind: 'coins' };
 
 async function loadMe() {
   const s = await session();
   if (!s) { state.me = null; return null; }
-  const [p, t, sc] = await Promise.all([
+  const [p, t, sc, mc] = await Promise.all([
     sb.from('profiles').select('*').eq('id', s.user.id).maybeSingle(),
     sb.from('transactions').select('*').order('created_at', { ascending: false }).limit(100),
-    sb.from('scans').select('id,tier,allowed,created_at').order('created_at', { ascending: false }).limit(5)
+    sb.from('scans').select('id,tier,allowed,created_at', { count: 'exact' }).order('created_at', { ascending: false }).limit(5),
+    sb.rpc('member_count')
   ]);
   if (!p.data) { state.me = null; return null; }
-  state.me = { email: s.user.email, ...p.data, cash: Number(p.data.cash), tx: t.data || [], scans: sc.data || [] };
+  state.members = mc.data == null ? null : Number(mc.data);
+  state.me = { email: s.user.email, ...p.data, cash: Number(p.data.cash), tx: t.data || [], scans: sc.data || [], scanCount: sc.count || 0 };
   return state.me;
 }
 async function loadReviews() {
@@ -346,19 +346,35 @@ function footer() {
   </footer>`;
 }
 
-function walletCard(u) {
-  return `<div class="rounded-[26px] p-5 text-white relative overflow-hidden" style="background:linear-gradient(135deg,#a855f7,#6d28d9)">
-    <div class="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/10"></div>
-    <div class="flex justify-between items-start relative">
-      <div><div class="text-sm opacity-80 flex items-center gap-1">${ic('wallet')} Spendable wallet balance</div><div class="font-display font-bold text-4xl mt-1">${money(u.cash)}</div></div>
-      <a href="#/deposit" class="btn !py-2.5 !px-4 bg-white text-purple-700 text-sm">${ic('plus')} Deposit</a>
+function walletCard(u, variant = 'dash') {
+  const bal = (cls, bg, bd, tileBg, tileIc, label, val, lc) => `<div class="rounded-2xl p-3 flex items-center gap-3 ${cls}" style="background:${bg};border:1.5px solid ${bd}">
+    <div class="w-11 h-11 rounded-full flex-none flex items-center justify-center text-white" style="background:${tileBg}">${ic(tileIc)}</div>
+    <div><div class="text-[10px] font-extrabold tracking-wider" style="color:${lc}">${label}</div><div class="font-display font-bold text-xl">${val}</div></div></div>`;
+  if (variant === 'plain') {
+    return `<div class="rounded-[26px] p-5" style="background:linear-gradient(180deg,#ffffff,#faf5ff);border:1.5px solid #e9d5ff;box-shadow:0 10px 30px -14px rgba(124,58,237,.35)">
+      <div class="flex items-center justify-between gap-3">
+        <div><div class="text-[11px] font-extrabold tracking-wider text-purple-700 flex items-center gap-1.5">${ic('wallet', '!w-4 !h-4')} SPENDABLE WALLET CASH</div><div class="font-display font-bold text-4xl mt-1">${money(u.cash)}</div></div>
+        <div class="flex items-center gap-2 flex-none"><a href="#/deposit" class="btn btn-primary !py-2.5 !px-4 text-sm">${ic('plus')} Deposit</a><a href="#/profile" class="w-11 h-11 rounded-full border border-[var(--line)] bg-white flex items-center justify-center text-slate-500" aria-label="History">${ic('history')}</a></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-purple-100">
+        ${bal('', '#fffbeb', '#fde68a', 'linear-gradient(135deg,#fbbf24,#d97706)', 'coins', 'COINS BALANCE', u.coins.toLocaleString(), '#b45309')}
+        ${bal('', '#faf5ff', '#e9d5ff', 'linear-gradient(135deg,#a855f7,#7c3aed)', 'gem', 'VIP DIAMONDS', u.diamonds.toLocaleString(), '#7c3aed')}
+      </div></div>`;
+  }
+  return `<div class="rounded-[26px] overflow-hidden" style="border:1.5px solid #e9d5ff;box-shadow:0 10px 30px -14px rgba(124,58,237,.45)">
+    <div class="p-4 text-white flex items-center gap-3" style="background:linear-gradient(135deg,#a855f7,#6d28d9)">
+      <div class="w-12 h-12 rounded-2xl bg-slate-900 flex-none flex items-center justify-center">${ic('wallet', 'i-lg')}</div>
+      <div class="flex-1 min-w-0"><div class="text-xs font-bold opacity-90">Spendable Wallet Balance</div><div class="font-display font-bold text-3xl truncate">${money(u.cash)}</div></div>
+      <a href="#/deposit" class="btn !py-2.5 !px-4 text-sm bg-slate-900 text-white flex-none">Deposit ${ic('plus')}</a>
     </div>
-    <div class="grid grid-cols-2 gap-3 mt-5 relative">
-      <div class="rounded-2xl bg-white/15 p-3"><div class="text-xs opacity-80 flex items-center gap-1">${ic('coins')} Coins</div><div class="font-display font-bold text-xl">${u.coins.toLocaleString()}</div></div>
-      <div class="rounded-2xl bg-white/15 p-3"><div class="text-xs opacity-80 flex items-center gap-1">${ic('gem')} VIP diamonds</div><div class="font-display font-bold text-xl">${u.diamonds.toLocaleString()}</div></div>
-    </div>
-    <a href="#/packages" class="btn w-full mt-4 bg-white/20 text-white text-sm !py-3 relative">Get tokens ${ic('plus')}</a>
-  </div>`;
+    <div class="bg-white p-3 flex items-center gap-2.5">
+      <div class="w-10 h-10 rounded-xl flex-none bg-amber-50 text-amber-600 flex items-center justify-center">${ic('coins')}</div>
+      <div><div class="text-[10px] font-extrabold tracking-wider text-[var(--mute)]">COINS BALANCE</div><div class="font-display font-bold leading-tight">${u.coins.toLocaleString()}</div></div>
+      <span class="w-px h-8 bg-[var(--line)]"></span>
+      <div class="w-10 h-10 rounded-xl flex-none bg-purple-50 text-purple-600 flex items-center justify-center">${ic('gem')}</div>
+      <div><div class="text-[10px] font-extrabold tracking-wider text-[var(--mute)]">VIP DIAMONDS</div><div class="font-display font-bold leading-tight">${u.diamonds.toLocaleString()}</div></div>
+      <a href="#/packages" class="ml-auto chip !bg-white font-bold text-xs whitespace-nowrap">Get Tokens <span class="w-5 h-5 rounded-full grad text-white flex items-center justify-center">${ic('plus', '!w-3 !h-3')}</span></a>
+    </div></div>`;
 }
 function lobbyBanner() {
   return `<div class="dark-card p-4 flex items-center gap-3" style="border:1px solid #334155">
@@ -500,27 +516,97 @@ V.reset = () => `${head('')}
     </form>
   </main>`;
 
+const PRESETS = [50, 100, 200, 500];
+const initials = u => esc((u.first_name[0] || '') + (u.last_name[0] || ''));
+const blob = '<div class="absolute -top-16 -right-16 w-64 h-64 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>';
+const miniPhone = '<div class="w-24 h-40 rounded-[18px] p-1 bg-slate-800 shadow-lg flex-none"><div class="h-full rounded-[14px] bg-slate-900 overflow-hidden"><div class="h-4 bg-red-600"></div>' +
+  [0, 1, 2, 3, 4].map(() => '<div class="px-1.5 py-1.5 border-b border-slate-800"><div class="h-1 w-10 rounded bg-slate-600 mb-1"></div><div class="flex gap-0.5"><div class="flex-1 h-3 rounded-sm bg-slate-700"></div><div class="flex-1 h-3 rounded-sm bg-slate-700"></div><div class="flex-1 h-3 rounded-sm bg-slate-700"></div></div></div>').join('') + '</div></div>';
+
+/* Three stat blocks: same layout and colours as the reference, but every number is real. */
+function statBlocks(u) {
+  const topped = u.tx.filter(t => t.type === 'deposit' && t.status === 'successful').reduce((a, t) => a + Number(t.amount), 0);
+  const items = [
+    ['chart-line', 'linear-gradient(180deg,#ecfdf5,#d1fae5)', '#86efac', '#059669', String(u.scanCount), 'READINGS DONE'],
+    ['trophy', 'linear-gradient(180deg,#fffbeb,#fef3c7)', '#fcd34d', '#d97706', 'GH\u20B5 ' + Math.round(topped).toLocaleString(), 'TOTAL TOPPED UP'],
+    ['users', 'linear-gradient(180deg,#fff1f2,#ffe4e6)', '#fda4af', '#e11d48', state.members == null ? '-' : state.members.toLocaleString(), 'MEMBERS']
+  ];
+  return `<div class="grid grid-cols-3 gap-3">${items.map(([i, bg, bd, c, n, l]) => `<div class="rounded-[22px] py-4 px-1.5 text-center" style="background:${bg};border:1.5px solid ${bd}">
+    <div class="w-10 h-10 mx-auto rounded-xl bg-white/70 flex items-center justify-center" style="color:${c}">${ic(i)}</div>
+    <div class="font-display font-bold text-[16px] mt-2 leading-tight">${n}</div>
+    <div class="text-[10px] font-extrabold tracking-wider mt-1" style="color:${c}">${l}</div></div>`).join('')}</div>`;
+}
+
 V.dashboard = u => `
-  <div class="wrap pt-5 flex items-center justify-between">
-    <div><div class="text-sm text-[var(--mute)]">Hello</div><div class="font-display font-bold text-2xl">Welcome ${esc(u.first_name)}!</div></div>
-    <button class="relative w-11 h-11 rounded-full border border-[var(--line)] flex items-center justify-center" data-action="bell" aria-label="Notifications">${ic('bell')}${u.tx.some(t => t.status === 'pending') ? '<span class="absolute top-2 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full"></span>' : ''}</button>
+  <div class="relative overflow-hidden">
+    ${blob}
+    <div class="wrap pt-5 relative flex items-center justify-between">
+      <div class="flex items-center gap-3"><div class="w-12 h-12 rounded-full grad text-white font-display font-bold flex items-center justify-center shadow">${initials(u)}</div>
+        <div class="font-display font-bold text-xl">Welcome ${esc(u.first_name)}!</div></div>
+      <button class="relative w-11 h-11 rounded-full bg-white border border-[var(--line)] flex items-center justify-center" data-action="bell" aria-label="Notifications">${ic('bell')}${u.tx.some(t => t.status === 'pending') ? '<span class="absolute top-2 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full"></span>' : ''}</button>
+    </div>
+    <div class="wrap mt-4 relative">${walletCard(u, 'dash')}</div>
+    <div class="wrap mt-4 relative">${statBlocks(u)}</div>
   </div>
-  <div class="wrap mt-4">${walletCard(u)}</div>
-  <div class="wrap mt-4 grid grid-cols-3 gap-3">
-    ${[['scan-line', u.scans.length, 'Readings'], ['coins', u.coins.toLocaleString(), 'Coins'], ['gem', u.diamonds.toLocaleString(), 'Diamonds']]
-      .map(([i, n, l]) => `<div class="card py-4 text-center"><div class="text-purple-600 flex justify-center">${ic(i)}</div><div class="font-display font-bold text-xl mt-1">${n}</div><div class="text-[11px] font-semibold text-[var(--mute)]">${l}</div></div>`).join('')}
-  </div>
-  <section class="wrap mt-6">
-    <h2 class="font-display font-bold text-xl mb-3">Available tools</h2>
-    <a href="#/predict" class="card p-4 flex items-center gap-4"><div class="w-14 h-14 rounded-2xl grad text-white flex items-center justify-center flex-none">${ic('brain', 'i-lg')}</div><div class="flex-1"><div class="font-display font-bold">Instant Virtuals odds reader</div><p class="text-sm text-[var(--mute)]">Upload a lobby screenshot and see implied probabilities and margin.</p></div>${ic('chevron-right', 'text-slate-400')}</a>
-    <div class="card p-4 flex items-center gap-4 mt-3 opacity-70"><div class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center flex-none">${ic('refresh-cw', 'i-lg')}</div><div class="flex-1"><div class="font-display font-bold">Spin the Bottle</div><p class="text-sm text-[var(--mute)]">Coming soon.</p></div><span class="chip text-xs">SOON</span></div>
+
+  <section class="wrap mt-7">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-display font-bold text-xl flex items-center gap-2"><span class="text-orange-500">${ic('flame', 'i-lg')}</span> Available Tools</h2>
+      <a href="#/predict" class="chip font-bold">View All ${ic('arrow-right')}</a>
+    </div>
+    <a href="#/predict" class="block rounded-[24px] p-4" style="background:linear-gradient(180deg,#ecfdf5,#d1fae5);border:1.5px solid #86efac">
+      <div class="flex gap-4">
+        <div class="w-14 h-14 rounded-2xl flex-none flex items-center justify-center text-white shadow" style="background:linear-gradient(135deg,#10b981,#047857)">${ic('brain', 'i-lg')}</div>
+        <div class="flex-1">
+          <div class="font-display font-extrabold tracking-wide text-emerald-900 uppercase text-[16px] leading-tight">Instant Virtuals Odds Reader</div>
+          <span class="inline-flex items-center gap-1 text-xs font-bold text-white bg-emerald-600 rounded-full px-2.5 py-1 mt-1.5">${ic('circle-check', '!w-3.5 !h-3.5')} Odds + margin</span>
+          <p class="text-sm text-emerald-900/80 mt-2">Reads the 1X2 and over/under odds from your lobby screenshot and shows the probabilities they imply.</p>
+          <div class="font-display font-bold text-emerald-800 mt-2 flex items-center gap-1">Open Odds Reader ${ic('arrow-right')}</div>
+        </div>
+      </div>
+    </a>
+    <div class="rounded-[24px] p-4 mt-3" style="background:linear-gradient(180deg,#fff1f2,#ffe4e6);border:1.5px solid #fda4af">
+      <div class="flex gap-4">
+        <div class="w-14 h-14 rounded-2xl flex-none flex items-center justify-center text-white shadow" style="background:linear-gradient(135deg,#f43f5e,#be123c)">${ic('refresh-cw', 'i-lg')}</div>
+        <div class="flex-1">
+          <div class="flex justify-between items-start gap-2"><div class="font-display font-extrabold tracking-wide text-rose-900 uppercase text-[16px]">Spin the Bottle</div><span class="text-[11px] font-bold text-white bg-rose-500 rounded-full px-2.5 py-1 whitespace-nowrap">Coming soon</span></div>
+          <p class="text-sm text-rose-900/80 mt-2">An interactive bottle roulette tool is planned. It is not available yet.</p>
+        </div>
+      </div>
+    </div>
   </section>
-  <section class="wrap mt-6 grid grid-cols-3 gap-3">
-    ${[['circle-help', 'How to Play', '#/guide'], ['message-square', 'Feedback', '#/profile'], ['flag', 'Report Issue', 'mailto:' + CONFIG.support.email + '?subject=Issue']]
-      .map(([i, l, h]) => `<a href="${h}" class="card py-4 text-center text-sm font-bold"><div class="text-purple-600 flex justify-center mb-1">${ic(i)}</div>${l}</a>`).join('')}
+
+  <section class="wrap mt-4 grid grid-cols-3 gap-3">
+    ${[['book-open', '#ede9fe', '#7c3aed', 'How to Play', '#/guide'], ['star', '#fef3c7', '#f59e0b', 'Feedback', '#/profile'], ['triangle-alert', '#fee2e2', '#ef4444', 'Report Issue', 'mailto:' + CONFIG.support.email + '?subject=Issue']]
+      .map(([i, bg, c, l, h]) => `<a href="${h}" class="card py-4 text-center text-sm font-bold"><div class="w-12 h-12 mx-auto rounded-2xl flex items-center justify-center mb-2" style="background:${bg};color:${c}">${ic(i)}</div>${l}</a>`).join('')}
   </section>
+
+  <section class="wrap mt-7">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-display font-bold text-xl flex items-center gap-2"><span class="text-amber-500">${ic('lightbulb', 'i-lg')}</span> Odds Reading Guide</h2>
+      <a href="#/guide" class="chip !bg-emerald-50 !text-emerald-700 !border-emerald-200 font-bold">How to read</a>
+    </div>
+    <div class="card p-4" style="background:linear-gradient(180deg,#ffffff,#f8fafc)">
+      <div class="flex gap-4">
+        ${miniPhone}
+        <div>
+          <div class="font-display font-bold text-lg">Reading the odds</div>
+          <p class="text-sm text-[var(--mute)] mt-1">Odds convert to probabilities. Remove the bookmaker margin and you see a fair split between Home, Draw and Away.</p>
+          <div class="text-sm font-semibold mt-3 space-y-1.5">
+            <div class="flex gap-2 items-center text-emerald-700">${ic('circle-check')} 1X2 and Over/Under markets</div>
+            <div class="flex gap-2 items-center text-purple-700">${ic('gem')} VIP Diamonds: margin breakdown</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-cols-3 gap-3 mt-3">
+      ${[['shield-check', '#059669', 'Margin shown', 'On every match'], ['zap', '#2563eb', 'Quick read', 'Fixtures extracted'], ['badge-check', '#d97706', 'Auto credit', 'Paystack MoMo']]
+        .map(([i, c, t, s]) => `<div class="card py-4 text-center"><div class="flex justify-center" style="color:${c}">${ic(i)}</div><div class="font-display font-bold text-[13px] mt-1">${t}</div><div class="text-[11px] text-[var(--mute)]">${s}</div></div>`).join('')}
+    </div>
+  </section>
+
   <section class="wrap mt-6">
-    <div class="card p-5">
+    ${lobbyBanner()}
+    <div class="card p-5 mt-4">
       <div class="font-display font-bold flex items-center gap-2 mb-3">${ic('lightbulb', 'text-amber-500')} Money-management reminders</div>
       <ul class="text-sm text-slate-700 space-y-2.5">
         <li class="flex gap-2">${ic('check', 'text-emerald-600 flex-none mt-0.5')} Set a budget before you play and stop when you reach it.</li>
@@ -528,59 +614,65 @@ V.dashboard = u => `
         <li class="flex gap-2">${ic('check', 'text-emerald-600 flex-none mt-0.5')} Never chase losses with bigger stakes.</li>
       </ul>
     </div>
-    <div class="mt-4">${lobbyBanner()}</div>
   </section>
-  <div class="h-28"></div>`;
+  ${footer()}
+  <div class="h-20"></div>`;
 
 V.packages = u => {
-  const list = state.packTab === 'coins' ? COIN_PACKS : DIAMOND_PACKS;
-  return `${pageTitle('Packages', 'Top up coins or VIP diamonds. They pay for readings and do not change any odds or results.')}
-  <div class="wrap mt-4">${walletCard(u)}</div>
-  <div class="wrap mt-5"><div class="grid grid-cols-2 gap-2 p-1.5 rounded-full bg-slate-100">
-    <button data-action="packtab" data-v="coins" class="btn !py-2.5 ${state.packTab === 'coins' ? 'btn-primary' : '!bg-transparent text-slate-600'}">${ic('coins')} Coin Packages</button>
-    <button data-action="packtab" data-v="diamonds" class="btn !py-2.5 ${state.packTab === 'diamonds' ? 'btn-primary' : '!bg-transparent text-slate-600'}">${ic('gem')} Diamonds (VIP)</button>
+  const coins = state.packTab === 'coins', list = coins ? COIN_PACKS : DIAMOND_PACKS;
+  const tile = coins ? 'linear-gradient(135deg,#fde68a,#fbbf24)' : 'linear-gradient(135deg,#ede9fe,#c4b5fd)', fg = coins ? '#b45309' : '#7c3aed';
+  return `<div class="relative overflow-hidden">
+    ${blob}
+    <div class="wrap pt-5 relative flex items-center justify-between">
+      <div class="flex items-center gap-3"><div class="w-12 h-12 rounded-full grad text-white font-display font-bold flex items-center justify-center shadow">${initials(u)}</div>
+        <div class="font-display font-bold text-xl">Welcome ${esc(u.first_name)}!</div></div>
+      <button class="w-11 h-11 rounded-full bg-white border border-[var(--line)] flex items-center justify-center" data-action="bell" aria-label="Notifications">${ic('bell')}</button>
+    </div>
+    <div class="wrap mt-5 relative"><h1 class="font-display font-bold text-[28px] leading-tight">Coins &amp; Diamonds Packages</h1>
+      <p class="text-[var(--mute)] mt-1">Deposit cash to your wallet and buy coins or VIP diamonds, or pay for a package straight from MoMo.</p></div>
+    <div class="wrap mt-4 relative">${walletCard(u, 'plain')}</div>
+  </div>
+  <div class="wrap mt-5"><div class="grid grid-cols-2 gap-1 p-1.5 rounded-full" style="background:#eef0f7">
+    <button data-action="packtab" data-v="coins" class="btn !py-3 text-sm ${coins ? '!bg-white shadow text-slate-900' : '!bg-transparent text-slate-500'}"><span class="text-amber-500">${ic('coins')}</span> Coins Packages</button>
+    <button data-action="packtab" data-v="diamonds" class="btn !py-3 text-sm ${!coins ? '!bg-white shadow text-slate-900' : '!bg-transparent text-slate-500'}"><span class="text-purple-600">${ic('gem')}</span> Diamonds (VIP)</button>
   </div></div>
   <div class="wrap mt-5 space-y-4">${list.map(p => `
-    <div class="card p-4 relative ${p.popular ? '!border-purple-400' : ''}">
-      ${p.popular ? '<span class="tag">POPULAR</span>' : ''}
-      <div class="flex items-center gap-4">
-        <div class="w-14 h-14 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic(state.packTab === 'coins' ? 'coins' : 'gem', 'i-lg')}</div>
-        <div class="flex-1"><div class="font-display font-bold">${p.name}</div><p class="text-sm text-[var(--mute)]">${p.amount}</p></div>
-        <div class="font-display font-bold text-lg">${money(p.price)}</div>
+    <div class="rounded-[22px] p-4" style="${p.popular ? 'background:linear-gradient(135deg,#faf5ff,#f3e8ff);border:1.5px solid #c084fc' : 'background:#fff;border:1.5px solid var(--line)'}">
+      <div class="flex items-center gap-3">
+        <div class="w-14 h-14 rounded-2xl flex-none flex items-center justify-center shadow-sm" style="background:${tile};color:${fg}">${ic(coins ? 'coins' : 'gem', 'i-lg')}</div>
+        <div class="flex-1 min-w-0"><div class="font-display font-bold text-[17px] leading-tight">${p.name}</div><p class="text-[13px] text-[var(--mute)] mt-0.5">${p.desc}</p></div>
+        <div class="relative flex-none">
+          ${p.popular ? '<span class="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[10px] font-extrabold text-white px-2.5 py-0.5 rounded-full" style="background:linear-gradient(135deg,#fbbf24,#f97316)">POPULAR</span>' : ''}
+          <div class="font-display font-bold text-white text-sm px-4 py-3 rounded-full bg-slate-900 whitespace-nowrap">${money(p.price)}</div>
+        </div>
       </div>
-      <button data-action="buy" data-id="${p.id}" class="btn btn-primary w-full mt-3 !py-3">Buy with wallet balance</button>
+      <div class="mt-3 space-y-2">
+        <button data-action="buy" data-id="${p.id}" class="btn btn-primary w-full !py-3 text-sm">${ic('wallet')} Buy with wallet balance</button>
+        <button data-action="paypack" data-id="${p.id}" class="btn w-full !py-3 text-sm bg-slate-900 text-white">${ic('smartphone')} Pay with MoMo</button>
+      </div>
     </div>`).join('')}</div>
-  <p class="wrap text-xs text-[var(--mute)] mt-4">Need wallet funds? <a href="#/deposit" class="font-bold text-purple-700">Deposit via MoMo</a>.</p>
+  <p class="wrap text-xs text-[var(--mute)] mt-4">Paying with MoMo uses secure Paystack checkout (MTN MoMo, Telecel Cash, AT Money) and credits your account automatically. Or <a href="#/deposit" class="font-bold text-purple-700">add cash to your wallet</a> first.</p>
   <div class="h-28"></div>`;
 };
 
 V.deposit = u => {
-  const pend = u.tx.find(t => t.type === 'deposit' && t.status === 'pending');
-  const acct = CONFIG.momo[state.depNetwork];
+  const recent = u.tx.filter(t => t.reference).slice(0, 5);
   return `${head('#/dashboard')}
   <main class="wrap pb-32">
     <h1 class="font-display font-bold text-3xl">Deposit</h1>
-    <p class="text-[var(--mute)] mt-1">Pay by mobile money, then tell us once you have sent it.</p>
-    ${pend ? `<div class="card p-5 mt-5 !border-amber-300 !bg-amber-50">
-      <div class="flex items-center gap-2 font-display font-bold text-amber-800">${ic('clock')} Awaiting admin confirmation</div>
-      <p class="text-sm text-amber-900 mt-2">${money(pend.amount)} via ${esc(pend.network)} from ${esc(pend.sender_name)} (${esc(pend.sender_number)}). Reference <b>${pend.id.slice(0, 8).toUpperCase()}</b>.</p>
-      <ol class="text-sm mt-3 space-y-2">
-        <li class="flex gap-2 items-center text-emerald-700">${ic('circle-check')} Payment reported</li>
-        <li class="flex gap-2 items-center text-amber-800">${ic('loader', 'spin')} Admin checking your MoMo receipt</li>
-        <li class="flex gap-2 items-center text-slate-400">${ic('circle')} Wallet credited</li>
-      </ol>
-      <button data-action="refresh" class="btn btn-ghost w-full mt-4 !py-2.5 text-sm">${ic('refresh-cw')} Check status</button>
-    </div>` : ''}
-    <div class="card p-5 mt-5 space-y-4">
-      <div><span class="label">1. Choose network</span>
-        <div class="grid grid-cols-3 gap-2">${Object.keys(CONFIG.momo).map(n => `<button data-action="network" data-v="${n}" class="rounded-2xl py-3 text-xs font-bold border-[1.5px] ${state.depNetwork === n ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-[var(--line)]'}">${n}</button>`).join('')}</div></div>
-      <div class="rounded-2xl bg-slate-50 p-4 text-sm"><div class="text-[var(--mute)]">Send to</div><div class="font-display font-bold text-lg">${acct.number}</div><div class="text-slate-600">${acct.name}</div></div>
-      <div><label class="label" for="depAmount">2. Amount (GH\u20B5)</label><input id="depAmount" class="input" type="number" min="1" inputmode="decimal" placeholder="100"></div>
-      ${phoneField('3. Sender MoMo number', 'depSender', '24 123 4567')}
-      <div><label class="label" for="depName">Sender MoMo name</label><input id="depName" class="input" placeholder="Name on the MoMo account"></div>
+    <p class="text-[var(--mute)] mt-1">Add cash to your wallet with mobile money. Your balance updates automatically once the payment succeeds.</p>
+    <div class="mt-4">${walletCard(u, 'plain')}</div>
+    <div class="card p-5 mt-4 space-y-4">
+      <div><span class="label">Choose an amount (GH\u20B5)</span>
+        <div class="grid grid-cols-4 gap-2">${PRESETS.map(a => `<button data-action="preset" data-v="${a}" class="rounded-2xl py-3 text-sm font-bold border-[1.5px] border-[var(--line)] bg-white">${a}</button>`).join('')}</div></div>
+      <div><label class="label" for="depAmount">Or enter an amount</label><input id="depAmount" class="input" type="number" min="1" max="5000" inputmode="decimal" placeholder="100"></div>
+      <div class="rounded-2xl bg-slate-50 p-3 text-sm flex gap-2 text-slate-700"><span class="text-emerald-600 flex-none">${ic('shield-check')}</span><span>Secure checkout by Paystack for MTN MoMo, Telecel Cash and AT Money. You approve the payment on your phone.</span></div>
       <p id="formErr" class="text-sm font-semibold text-red-600 hidden"></p>
-      <button data-action="paid" class="btn btn-primary w-full" ${pend ? 'disabled' : ''}>${ic('check')} I Have Paid</button>
+      <button data-action="paydeposit" class="btn btn-primary w-full">${ic('smartphone')} Pay with MoMo</button>
     </div>
+    ${recent.length ? `<div class="card p-5 mt-4"><div class="font-display font-bold mb-2">Recent payments</div>
+      ${recent.map(t => `<div class="py-2.5 flex items-center justify-between gap-3 border-b border-[var(--line)] last:border-0"><div class="min-w-0"><div class="text-sm font-semibold truncate">${esc(t.label)}</div><div class="text-xs text-[var(--mute)]">${esc(t.reference)} &middot; ${fmtDate(t.created_at)}</div></div><span class="status-${t.status} text-[11px] font-bold px-2 py-0.5 rounded-full capitalize">${t.status}</span></div>`).join('')}
+      <button data-action="refresh" class="btn btn-ghost w-full mt-3 !py-2.5 text-sm">${ic('refresh-cw')} Refresh</button></div>` : ''}
   </main>${nav('')}`;
 };
 
@@ -711,7 +803,7 @@ V.profile = u => {
       <div class="font-display font-bold flex items-center gap-2">${ic('receipt', 'text-purple-600')} Payment &amp; deposit history</div>
       <div class="flex gap-2 overflow-x-auto py-3">${['all', 'pending', 'successful', 'failed'].map(f => `<button data-action="filter" data-v="${f}" class="chip capitalize flex-none ${state.txFilter === f ? '!bg-purple-600 !text-white !border-purple-600' : ''}">${f}</button>`).join('')}</div>
       <div class="divide-y divide-[var(--line)]">
-        ${list.length ? list.map(t => `<div class="py-3 flex items-center gap-3"><div class="flex-1 min-w-0"><div class="font-semibold text-sm truncate">${esc(t.label)}</div><div class="text-xs text-[var(--mute)]">${t.id.slice(0, 8).toUpperCase()} &middot; ${fmtDate(t.created_at)}</div></div>
+        ${list.length ? list.map(t => `<div class="py-3 flex items-center gap-3"><div class="flex-1 min-w-0"><div class="font-semibold text-sm truncate">${esc(t.label)}</div><div class="text-xs text-[var(--mute)]">${esc(t.reference || t.id.slice(0, 8).toUpperCase())} &middot; ${fmtDate(t.created_at)}</div></div>
           <div class="text-right"><div class="font-bold text-sm">${t.amount < 0 ? '-' : '+'}${money(Math.abs(t.amount))}</div><span class="status-${t.status} text-[11px] font-bold px-2 py-0.5 rounded-full capitalize">${t.status}</span></div></div>`).join('') : '<p class="text-sm text-[var(--mute)] py-4 text-center">No transactions yet.</p>'}
       </div>
     </div>
@@ -733,10 +825,51 @@ V.profile = u => {
 /* =========================================================
    Router
    ========================================================= */
+/* =========================================================
+   Paystack checkout + live wallet updates
+   ========================================================= */
+async function confirmPayment(ref) {
+  for (let i = 0; i < 8; i++) {
+    const r = await callFn('paystack-verify', { reference: ref });
+    if (r.status === 'successful') { toast('Payment received. Your balance is updated.'); await render(true); return; }
+    if (r.status === 'failed') { toast('The payment did not go through. You were not charged.'); await render(true); return; }
+    await new Promise(res => setTimeout(res, 2500));
+  }
+  toast('Still waiting for confirmation. Your balance updates automatically when it arrives.');
+  await render(true);
+}
+async function pay(payload) {
+  if (typeof PaystackPop === 'undefined') throw 'Paystack could not load. Check your connection and try again.';
+  const init = await callFn('paystack-init', payload);
+  const outcome = await new Promise((resolve, reject) => {
+    new PaystackPop().resumeTransaction(init.access_code, {
+      onSuccess: () => resolve('success'),
+      onCancel: () => resolve('cancel'),
+      onError: e => reject((e && e.message) || 'The payment could not start.')
+    });
+  });
+  if (outcome === 'cancel') { toast('Payment cancelled.'); await render(true); return; }
+  toast('Confirming your payment...');
+  await confirmPayment(init.reference);
+}
+
+let wallet = null;
+function watchWallet(uid) {
+  if (wallet && wallet.uid === uid) return;
+  if (wallet) sb.removeChannel(wallet.ch);
+  const ch = sb.channel('wallet-' + uid)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: 'id=eq.' + uid }, () => {
+      const page = location.hash.replace(/^#\/?/, '');
+      if (['dashboard', 'packages', 'deposit', 'profile'].includes(page)) render(true);
+    })
+    .subscribe();
+  wallet = { uid, ch };
+}
+
 const PROTECTED = ['dashboard', 'packages', 'deposit', 'predict', 'profile'];
 const GUEST_ONLY = ['login', 'register'];
 let renderTok = 0;
-async function render() {
+async function render(keep) {
   const tok = ++renderTok;
   const route = (location.hash.replace(/^#\/?/, '') || '').split('?')[0];
   if (route === 'reviews') return;
@@ -751,13 +884,14 @@ async function render() {
   if (['landing', 'about'].includes(name) && CONFIGURED) await loadReviews();
   if (tok !== renderTok) return;
   if (PROTECTED.includes(name) && !me) { $('#app').innerHTML = head('') + '<div class="wrap pt-6"><p class="text-[var(--mute)]">Account data is unavailable. Make sure schema.sql has been run in Supabase, then refresh.</p></div>'; return; }
+  if (me) watchWallet(me.id);
   const html = V[name](me);
   const showNav = me && ['dashboard', 'packages', 'profile'].includes(name);
   $('#app').innerHTML = html + (showNav ? nav(name) : '') + (name === 'predict' && me ? nav('predict') : '');
   lucide.createIcons();
-  window.scrollTo(0, 0);
+  if (!keep) window.scrollTo(0, 0);
 }
-window.addEventListener('hashchange', render);
+window.addEventListener('hashchange', () => render());
 sb.auth.onAuthStateChange(ev => {
   if (ev === 'PASSWORD_RECOVERY') location.hash = '#/reset';
   if (ev === 'SIGNED_OUT') { state.me = null; }
@@ -766,7 +900,7 @@ sb.auth.onAuthStateChange(ev => {
 /* =========================================================
    Events
    ========================================================= */
-function showErr(m) { const e = $('#formErr'); if (e) { e.textContent = m; e.classList.remove('hidden'); } }
+function showErr(m) { const e = $('#formErr'); if (e) { e.textContent = m; e.classList.toggle('hidden', !m); } }
 async function go(fn) { try { await fn(); } catch (e) { toast(msg(e)); } }
 
 document.addEventListener('submit', async e => {
@@ -818,16 +952,15 @@ document.addEventListener('click', async e => {
       if (error) throw error.message;
       toast('Package added to your account.'); render();
     }); break;
-    case 'network': state.depNetwork = v; render(); break;
-    case 'paid': go(async () => {
-      const amount = Number($('#depAmount').value), sender = normPhone($('#depSender').value), name = $('#depName').value.trim();
-      if (!(amount >= 1)) throw 'Enter a valid amount.';
-      if (sender.length !== 9) throw 'Enter the MoMo number you paid from.';
-      if (name.length < 2) throw 'Enter the name on that MoMo account.';
-      const { error } = await sb.rpc('create_deposit', { p_network: state.depNetwork, p_amount: amount, p_sender_number: '+233' + sender, p_sender_name: name });
-      if (error) throw error.message;
-      toast('Payment reported. Awaiting admin confirmation.'); render();
-    }); break;
+    case 'preset': { const i = $('#depAmount'); if (i) i.value = v; break; }
+    case 'paydeposit': {
+      const amount = Number(($('#depAmount') || {}).value);
+      if (!(amount >= 1 && amount <= 5000)) return showErr('Enter an amount between GH\u20B51 and GH\u20B55,000.');
+      showErr(''); b.disabled = true;
+      go(() => pay({ kind: 'deposit', amount })).finally(() => { b.disabled = false; });
+      break;
+    }
+    case 'paypack': b.disabled = true; go(() => pay({ kind: 'package', package_id: b.dataset.id })).finally(() => { b.disabled = false; }); break;
     case 'refresh': render(); break;
     case 'filter': state.txFilter = v; render(); break;
     case 'star': state.reviewDraft = $('#reviewText')?.value || ''; state.reviewRating = Number(v); render(); break;
