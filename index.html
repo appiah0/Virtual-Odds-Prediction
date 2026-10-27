@@ -29,6 +29,86 @@
 </style>
 </head>
 <body>
+<div id="authScreen" class="fixed inset-0 z-50 overflow-y-auto hidden" style="background:linear-gradient(160deg,#f3e8ff,#ede9fe 55%,#ffffff)">
+  <div class="max-w-md mx-auto px-5 py-8">
+    <span class="inline-block rounded-full border border-purple-300 bg-white/70 px-4 py-1 text-sm font-extrabold text-purple-800 tracking-wide">ODDS READER</span>
+
+    <!-- LOGIN -->
+    <div id="v-login">
+      <h1 class="text-3xl font-extrabold mt-5">Login</h1>
+      <p class="text-sm text-gray-600 mt-1">Don't have an account? <a href="#" data-view="signup" class="text-purple-700 font-bold">Sign up here</a></p>
+      <div class="field flex items-center gap-2 mt-6">
+        <span id="liPre" class="hidden text-gray-700 font-semibold">+233</span>
+        <input id="liId" type="text" autocomplete="username" placeholder="Phone or email address" class="bg-transparent outline-none flex-1">
+      </div>
+      <div class="field flex items-center gap-2 mt-3">
+        <span>🔒</span>
+        <input id="liPw" type="password" autocomplete="current-password" placeholder="Password" class="bg-transparent outline-none flex-1">
+        <a href="#" data-view="forgot" class="text-xs font-extrabold text-purple-700">FORGOT</a>
+      </div>
+      <label class="flex items-center gap-2 mt-4 text-sm text-gray-700"><input id="liRem" type="checkbox" checked class="w-4 h-4 accent-purple-700"> Remember me</label>
+      <div class="flex justify-end mt-6"><button id="loginBtn" class="btn px-7 py-3">Sign In →</button></div>
+    </div>
+
+    <!-- SIGN UP -->
+    <div id="v-signup" class="hidden">
+      <h1 class="text-3xl font-extrabold mt-5">Create account</h1>
+      <p class="text-sm text-gray-600 mt-1">Already have an account? <a href="#" data-view="login" class="text-purple-700 font-bold">Sign in here</a></p>
+      <div class="grid grid-cols-2 gap-2 mt-5">
+        <input id="suFirst" class="field" placeholder="First Name" autocomplete="given-name">
+        <input id="suSur" class="field" placeholder="Surname" autocomplete="family-name">
+      </div>
+      <input id="suOther" class="field mt-2" placeholder="Other Name (Optional)">
+      <div class="grid grid-cols-[1fr_auto_1.2fr] gap-2 mt-2">
+        <select class="field" aria-label="Country"><option>Ghana (GHS)</option></select>
+        <div class="field font-semibold text-gray-700 flex items-center">+233</div>
+        <input id="suPhone" class="field" inputmode="tel" placeholder="Phone Number" autocomplete="tel-national">
+      </div>
+      <input id="suEmail" type="email" class="field mt-2" placeholder="Email Address" autocomplete="email">
+      <input id="suPw" type="password" class="field mt-2" placeholder="Password (Min 8 characters)" autocomplete="new-password">
+      <input id="suPw2" type="password" class="field mt-2" placeholder="Confirm Password" autocomplete="new-password">
+      <label class="flex items-center gap-2 mt-4 text-sm text-gray-700"><input id="suTerms" type="checkbox" class="w-4 h-4 accent-purple-700"> <span>I agree to the <a href="#" data-terms class="text-purple-700 font-bold underline">Terms &amp; Conditions</a></span></label>
+      <div class="flex justify-end mt-6"><button id="suBtn" class="btn px-7 py-3">Create Account →</button></div>
+    </div>
+
+    <!-- FORGOT -->
+    <div id="v-forgot" class="hidden">
+      <h1 class="text-3xl font-extrabold mt-5">Reset password</h1>
+      <p class="text-sm text-gray-600 mt-1">Enter the email on your account and we will send you a reset link.</p>
+      <input id="fpEmail" type="email" class="field mt-6" placeholder="Email Address" autocomplete="email">
+      <div class="flex justify-between items-center mt-6">
+        <a href="#" data-view="login" class="text-sm font-bold text-purple-700">← Back to login</a>
+        <button id="fpBtn" class="btn px-7 py-3">Send link →</button>
+      </div>
+    </div>
+
+    <!-- NEW PASSWORD -->
+    <div id="v-reset" class="hidden">
+      <h1 class="text-3xl font-extrabold mt-5">New password</h1>
+      <p class="text-sm text-gray-600 mt-1">Choose a new password for your account.</p>
+      <input id="rsPw" type="password" class="field mt-6" placeholder="New password (Min 8 characters)" autocomplete="new-password">
+      <input id="rsPw2" type="password" class="field mt-2" placeholder="Confirm new password" autocomplete="new-password">
+      <div class="flex justify-end mt-6"><button id="rsBtn" class="btn px-7 py-3">Save password →</button></div>
+    </div>
+
+    <p id="amsg" class="text-sm text-red-600 mt-4" role="alert"></p>
+  </div>
+</div>
+
+<div id="terms" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center p-3">
+  <div class="bg-white rounded-3xl p-5 max-w-md w-full max-h-[80vh] overflow-y-auto">
+    <h2 class="font-extrabold text-lg">Terms &amp; Conditions</h2>
+    <ol class="list-decimal pl-5 mt-3 space-y-2 text-sm text-gray-700">
+      <li>You must be 18 years or older to use Odds Reader.</li>
+      <li>Odds Reader reads odds from screenshots and shows the probabilities built into them. It does not predict results. Virtual football results are random and you can lose money.</li>
+      <li>You are fully responsible for any bets you place. Only stake what you can afford to lose.</li>
+      <li>Credits pay for reading screenshots. Credits already used cannot be refunded.</li>
+      <li>Keep your password private. We may suspend accounts that misuse the service.</li>
+    </ol>
+    <button id="termsClose" class="btn w-full py-3 mt-4">Close</button>
+  </div>
+</div>
+
 <header class="px-4 pt-5 max-w-md mx-auto">
   <div class="text-xs text-purple-700">Welcome</div>
   <div id="hello" class="font-extrabold text-xl">Odds Reader</div>
@@ -129,23 +209,14 @@
 
 <!-- PROFILE -->
 <section id="t-profile" class="tab space-y-3">
-  <div id="authOut" class="card">
-    <h2 class="font-extrabold text-lg">Log in or create an account</h2>
-    <input id="email" type="email" autocomplete="email" placeholder="Email" class="field mt-3">
-    <input id="pw" type="password" autocomplete="current-password" placeholder="Password (6+ characters)" class="field mt-2">
-    <div class="flex gap-2 mt-3">
-      <button id="login" class="btn py-2 flex-1">Log in</button>
-      <button id="signup" class="ghost py-2 flex-1">Sign up</button>
-    </div>
-  </div>
-  <div id="authIn" class="hidden card">
+  <div id="authIn" class="card">
     <div class="text-xs text-gray-500">Signed in as</div>
-    <div id="who" class="font-extrabold"></div>
+    <div id="who" class="font-extrabold text-lg"></div>
+    <div id="whoSub" class="text-xs text-gray-500"></div>
     <div class="text-sm mt-2">Credits: <b id="bal2">0</b></div>
     <button id="logout" class="w-full mt-3 py-2 rounded-xl bg-red-50 text-red-700 font-semibold">Sign out</button>
   </div>
-  <p id="authMsg" class="text-xs text-purple-700"></p>
-  <div id="historyWrap" class="hidden">
+    <div id="historyWrap" class="hidden">
     <div class="flex justify-between items-center">
       <h3 class="font-extrabold">Saved scans</h3>
       <button id="clearHist" class="text-xs text-purple-700 underline">Clear</button>
@@ -230,28 +301,106 @@ async function refreshBalance() {
   }
   setBal(n);
 }
+const normPhone = v => {
+  let d = (v || '').replace(/\D/g, '');
+  if (d.startsWith('233')) d = d.slice(3);
+  d = d.replace(/^0+/, '');
+  return d.length === 9 ? '+233' + d : null;
+};
+let profile = null, recovering = false;
+const msg = t => { $('amsg').textContent = t || ''; };
+function showView(n) {
+  ['login', 'signup', 'forgot', 'reset'].forEach(v => $('v-' + v).classList.toggle('hidden', v !== n));
+  msg(''); $('authScreen').scrollTo({ top: 0 });
+}
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-view]');
+  if (a) { e.preventDefault(); showView(a.dataset.view); }
+  if (e.target.closest('[data-terms]')) { e.preventDefault(); $('terms').classList.remove('hidden'); }
+});
+$('termsClose').onclick = () => $('terms').classList.add('hidden');
+$('liId').addEventListener('input', () => $('liPre').classList.toggle('hidden', !/^[\d\s]+$/.test($('liId').value)));
+
 async function onUser(u) {
   user = u;
-  $('authOut').classList.toggle('hidden', !!u);
-  $('authIn').classList.toggle('hidden', !u);
-  $('who').textContent = u?.email || '';
-  $('hello').textContent = u ? u.email.split('@')[0] : 'Odds Reader';
+  $('authScreen').classList.toggle('hidden', (!!u && !recovering) || !configured);
+  profile = null;
+  if (u) {
+    const { data } = await sb.from('profiles').select('first_name,surname,phone').eq('user_id', u.id).maybeSingle();
+    profile = data;
+  }
+  $('hello').textContent = profile?.first_name || (u ? u.email.split('@')[0] : 'Odds Reader');
+  $('who').textContent = profile ? `${profile.first_name} ${profile.surname}` : (u?.email || '');
+  $('whoSub').textContent = u ? `${u.email}${profile?.phone ? ' · ' + profile.phone : ''}` : '';
   await refreshBalance();
 }
-if (!configured) {
-  $('authMsg').textContent = 'Add your Supabase URL and anon key in the code to turn on accounts.';
-} else {
-  sb.auth.onAuthStateChange((_e, s) => onUser(s?.user || null));
+
+if (configured) {
+  /* Remember me: if the user chose not to be remembered, end the session when the browser is reopened */
+  if (localStorage.getItem('or-remember') === '0' && !sessionStorage.getItem('or-active')) sb.auth.signOut();
+  const savedId = localStorage.getItem('or-id');
+  if (savedId) { $('liId').value = savedId; $('liId').dispatchEvent(new Event('input')); }
+
+  sb.auth.onAuthStateChange((ev, s) => {
+    if (ev === 'PASSWORD_RECOVERY') { recovering = true; showView('reset'); }
+    onUser(s?.user || null);
+  });
   sb.auth.getSession().then(({ data }) => onUser(data.session?.user || null));
-  $('signup').onclick = async () => {
-    const { error } = await sb.auth.signUp({ email: $('email').value.trim(), password: $('pw').value });
-    $('authMsg').textContent = error ? error.message : 'Account created. If email confirmation is on, confirm your email, then log in.';
+
+  $('loginBtn').onclick = async () => {
+    const id = $('liId').value.trim(), pw = $('liPw').value;
+    if (!id || !pw) return msg('Enter your email or phone number and your password.');
+    let error = null;
+    if (id.includes('@')) {
+      ({ error } = await sb.auth.signInWithPassword({ email: id, password: pw }));
+    } else {
+      const ph = normPhone(id);
+      if (!ph) return msg('Enter a valid Ghana phone number.');
+      const { data, error: fe } = await sb.functions.invoke('phone-login', { body: { phone: ph, password: pw } });
+      if (fe || !data?.access_token) error = { message: 'Wrong phone number or password.' };
+      else ({ error } = await sb.auth.setSession({ access_token: data.access_token, refresh_token: data.refresh_token }));
+    }
+    if (error) return msg(error.message);
+    const keep = $('liRem').checked;
+    localStorage.setItem('or-remember', keep ? '1' : '0');
+    sessionStorage.setItem('or-active', '1');
+    keep ? localStorage.setItem('or-id', id) : localStorage.removeItem('or-id');
+    msg(''); $('liPw').value = '';
   };
-  $('login').onclick = async () => {
-    const { error } = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('pw').value });
-    $('authMsg').textContent = error ? error.message : '';
+
+  $('suBtn').onclick = async () => {
+    const first = $('suFirst').value.trim(), sur = $('suSur').value.trim(), other = $('suOther').value.trim();
+    const phone = normPhone($('suPhone').value), email = $('suEmail').value.trim();
+    const pw = $('suPw').value, pw2 = $('suPw2').value;
+    if (!first || !sur) return msg('Enter your first name and surname.');
+    if (!phone) return msg('Enter a valid Ghana phone number, for example 0533327517.');
+    if (!/^\S+@\S+\.\S+$/.test(email)) return msg('Enter a valid email address.');
+    if (pw.length < 8) return msg('Password must be at least 8 characters.');
+    if (pw !== pw2) return msg('Passwords do not match.');
+    if (!$('suTerms').checked) return msg('Please agree to the Terms & Conditions.');
+    const { data, error } = await sb.auth.signUp({ email, password: pw, options: { data: { first_name: first, surname: sur, other_name: other, phone } } });
+    if (error) return msg(/database error/i.test(error.message) ? 'That phone number is already registered.' : error.message);
+    localStorage.setItem('or-remember', '1'); sessionStorage.setItem('or-active', '1');
+    if (!data.session) { showView('login'); msg('Account created. Check your email to confirm it, then sign in.'); }
   };
-  $('logout').onclick = () => sb.auth.signOut();
+
+  $('fpBtn').onclick = async () => {
+    const email = $('fpEmail').value.trim();
+    if (!/^\S+@\S+\.\S+$/.test(email)) return msg('Enter the email address on your account.');
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+    msg(error ? error.message : 'If that email has an account, a reset link is on its way. Check your inbox.');
+  };
+
+  $('rsBtn').onclick = async () => {
+    const a = $('rsPw').value, b = $('rsPw2').value;
+    if (a.length < 8) return msg('Password must be at least 8 characters.');
+    if (a !== b) return msg('Passwords do not match.');
+    const { error } = await sb.auth.updateUser({ password: a });
+    if (error) return msg(error.message);
+    recovering = false; await onUser(user); showView('login');
+  };
+
+  $('logout').onclick = () => { sessionStorage.removeItem('or-active'); sb.auth.signOut(); };
 }
 
 /* ---------- Image selection (HEIC supported) ---------- */
