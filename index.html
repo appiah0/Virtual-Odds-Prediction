@@ -263,11 +263,26 @@ function phoneField(label, name, ph) {
   return `<div><label class="label" for="${name}">${label}</label><div class="flex"><span class="flex items-center gap-1 px-3 rounded-l-[14px] border-[1.5px] border-r-0 border-[var(--line)] bg-slate-50 text-sm font-bold">+233</span><input class="input !rounded-l-none" id="${name}" name="${name}" type="tel" inputmode="tel" placeholder="${ph}"></div></div>`;
 }
 
+/* Static reviews: exactly 5, no database, nothing visitors can submit. */
+const REVIEWS = [
+  { name: 'EDIT name', stars: 5, text: 'EDIT comment 1' },
+  { name: 'EDIT name', stars: 5, text: 'EDIT comment 2' },
+  { name: 'EDIT name', stars: 4, text: 'EDIT comment 3' },
+  { name: 'EDIT name', stars: 5, text: 'EDIT comment 4' },
+  { name: 'EDIT name', stars: 4, text: 'EDIT comment 5' }
+];
 function reviewsBlock() {
   return `<section id="reviews" class="wrap mt-10">
     <div class="eyebrow">${ic('messages-square')} COMMUNITY</div>
     <h2 class="font-display font-bold text-3xl mt-1">What users are saying</h2>
-    <a href="#/feedback" class="card mt-4 p-4 flex items-center gap-3"><div class="w-11 h-11 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic('message-square-plus')}</div><div class="flex-1"><div class="font-display font-bold">Share your feedback</div><p class="text-sm text-[var(--mute)]">Tell us what is working and what to improve.</p></div>${ic('chevron-right', 'text-slate-400')}</a>
+    <div class="mt-4 space-y-3">${REVIEWS.slice(0, 5).map(r => `<div class="card p-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full grad text-white flex items-center justify-center font-display font-bold flex-none">${esc(r.name.trim()[0] || '?')}</div>
+        <div class="flex-1 min-w-0"><div class="font-display font-bold truncate">${esc(r.name)}</div>
+          <div class="flex gap-0.5">${[1, 2, 3, 4, 5].map(i => ic('star', (i <= r.stars ? 'star-on' : 'star-off') + ' !w-4 !h-4')).join('')}</div></div>
+      </div>
+      <p class="text-sm text-[var(--mute)] mt-3">${esc(r.text)}</p></div>`).join('')}</div>
+    <a href="#/feedback" class="card mt-4 p-4 flex items-center gap-3"><div class="w-11 h-11 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic('message-square-plus')}</div><div class="flex-1"><div class="font-display font-bold">Share your feedback</div><p class="text-sm text-[var(--mute)]">Goes privately to the developer.</p></div>${ic('chevron-right', 'text-slate-400')}</a>
   </section>`;
 }
 
