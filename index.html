@@ -56,7 +56,10 @@ html,body{background:#fff;color:var(--ink);font-family:'Plus Jakarta Sans',sans-
 .tag{position:absolute;top:-11px;left:16px;font-size:11px;font-weight:800;letter-spacing:.04em;color:#fff;padding:3px 12px;border-radius:8px 8px 8px 0;background:linear-gradient(135deg,var(--p1),var(--p2))}
 .toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-120px);background:#0f1226;color:#fff;padding:12px 18px;border-radius:14px;font-size:14px;font-weight:600;z-index:100;transition:transform .3s;max-width:90vw}
 .toast.show{transform:translateX(-50%) translateY(0)}
-.status-pending{background:#fef3c7;color:#92400e}.status-successful{background:#d1fae5;color:#065f46}.status-failed{background:#fee2e2;color:#991b1b}
+.status-pending{background:#fef3c7;color:#92400e}.status-successful{background:#d1fae5;color:#065f46}.status-failed{background:#fee2e2;color:#991b1b}.status-canceled{background:#e5e7eb;color:#374151}
+.modal-bg{position:fixed;inset:0;background:rgba(15,18,38,.55);backdrop-filter:blur(3px);z-index:90;display:flex;align-items:center;justify-content:center;padding:24px}
+.modal{background:#fff;border-radius:26px;max-width:360px;width:100%;padding:26px;text-align:center;box-shadow:0 30px 60px -20px rgba(15,18,38,.5);animation:pop .25s ease}
+@keyframes pop{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
 @keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin 1s linear infinite}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 :focus-visible{outline:3px solid #c4b5fd;outline-offset:2px}
@@ -72,9 +75,9 @@ html,body{background:#fff;color:var(--ink);font-family:'Plus Jakarta Sans',sans-
    The Claude API key is NOT here. It lives in a Supabase Edge Function secret.
    ========================================================= */
 const CONFIG = window.CONFIG || {
-  SUPABASE_URL: 'https://hyxrwhgakduytptasihp.supabase.co',
-  SUPABASE_ANON_KEY: 'sb_publishable_lJKyhjDgsKNZATFaDDwgNg_6vwJ2V_n',
-  support: { email: 'support@yourdomain.com', whatsapp: '233533327517', telegram: 'YourTelegramHandle' },
+  SUPABASE_URL: 'https://YOUR-PROJECT.supabase.co',
+  SUPABASE_ANON_KEY: 'YOUR-ANON-KEY',
+  support: { email: 'support@yourdomain.com', whatsapp: '233XXXXXXXXX', telegram: 'YourTelegramHandle' },
   lobbyUrl: 'https://www.sportybet.com/gh/'
 };
 const CONFIGURED = !CONFIG.SUPABASE_URL.includes('YOUR-PROJECT');
@@ -93,12 +96,6 @@ const TIERS = {
     { id: 'gold_vip',   name: 'Gold VIP',   amount: 40, n: 2, desc: 'Match readings, detailed',        icon: 'crown',         tile: 'linear-gradient(135deg,#a855f7,#7c3aed)', fg: '#fff', tag: 'VIP BEST' },
     { id: 'master_vip', name: 'Master VIP', amount: 80, n: 5, desc: 'Match readings, detailed',        icon: 'wand-sparkles', tile: 'linear-gradient(135deg,#f43f5e,#be123c)', fg: '#fff' }
   ]
-};
-  /* Static stats on the dashboard. Edit by hand. */
-const STATS = {
-  readings: '1,240',            // EDIT
-  topped:   'GH\u20B5 18,500',  // EDIT
-  members:  '320'               // EDIT
 };
 const COIN_PACKS = [
   { id: 'starter', name: 'Starter Coins Pack', price: 350,  desc: '1,000 coins. Enough for 1 Bronze reading.' },
@@ -159,12 +156,14 @@ const P = { step: 'tiers', kind: 'coins', tier: null, dataUrl: null, error: '', 
 async function loadMe() {
   const s = await session();
   if (!s) { state.me = null; return null; }
-  const [p, t, sc] = await Promise.all([
+  const [p, t, sc, mc] = await Promise.all([
     sb.from('profiles').select('*').eq('id', s.user.id).maybeSingle(),
     sb.from('transactions').select('*').order('created_at', { ascending: false }).limit(100),
     sb.from('scans').select('id,tier,allowed,created_at', { count: 'exact' }).order('created_at', { ascending: false }).limit(5),
+    sb.rpc('member_count')
   ]);
   if (!p.data) { state.me = null; return null; }
+  state.members = mc.data == null ? null : Number(mc.data);
   state.me = { email: s.user.email, ...p.data, cash: Number(p.data.cash), tx: t.data || [], scans: sc.data || [], scanCount: sc.count || 0 };
   return state.me;
 }
@@ -242,7 +241,7 @@ async function shrinkImage(file) {
 const V = {};
 const FAQ = [
   ['Can it predict who will win?', 'No. Virtual football results come from a random number generator, so nobody can predict them reliably. This tool reads the odds on your screenshot and shows what they imply, including the bookmaker margin.'],
-  ['How do I get started?', 'Create a free account, buy a package, then upload a screenshot of the Instant Football lobby on the Predictions page and pick the fixtures to read.'],
+  ['How do I get started?', 'Create an account and pay the one-time GH\u20B5 50 activation fee, buy a package, then upload a screenshot of the Instant Football lobby on the Predictions page and pick the fixtures to read.'],
   ['What happens to my screenshot?', 'It is sent securely to our server, read by the Claude API, and the extracted fixtures and odds are stored with your account. The image itself is not kept.'],
   ['Does paying more improve my chances?', 'No. Coins and diamonds only pay for readings. They do not change the odds or the outcome of any game.']
 ];
@@ -267,44 +266,11 @@ function phoneField(label, name, ph) {
   return `<div><label class="label" for="${name}">${label}</label><div class="flex"><span class="flex items-center gap-1 px-3 rounded-l-[14px] border-[1.5px] border-r-0 border-[var(--line)] bg-slate-50 text-sm font-bold">+233</span><input class="input !rounded-l-none" id="${name}" name="${name}" type="tel" inputmode="tel" placeholder="${ph}"></div></div>`;
 }
 
-/* Static reviews: exactly 5, no database. Edit by hand. Stars are 1-5. */
-const REVIEWS = [
-  { name: 'Kwame A.', date: '27 Oct, 23:04', stars: 5, text: 'EDIT comment 1' },
-  { name: 'Sandra P.', date: '26 Oct, 18:40', stars: 5, text: 'EDIT comment 2' },
-  { name: 'James B.', date: '25 Oct, 09:15', stars: 5, text: 'EDIT comment 3' },
-  { name: 'Caleb T.', date: '24 Oct, 21:02', stars: 5, text: 'EDIT comment 4' },
-  { name: 'Akua O.', date: '23 Oct, 14:30', stars: 5, text: 'EDIT comment 5' }
-];
-const AVATARS = [
-  'linear-gradient(135deg,#fbbf24,#d97706)', // amber
-  'linear-gradient(135deg,#a855f7,#7c3aed)', // purple
-  'linear-gradient(135deg,#10b981,#047857)', // green
-  'linear-gradient(135deg,#f43f5e,#be123c)', // rose
-  'linear-gradient(135deg,#38bdf8,#0369a1)'  // blue
-];
-function starRow(n, cls = '!w-[18px] !h-[18px]') {
-  return [1, 2, 3, 4, 5].map(i => ic('star', (i <= n ? 'star-on' : 'star-off') + ' ' + cls)).join('');
-}
-  const ACTIVE_USERS = '13520'; // EDIT: type any value, e.g. '1,250' or '2K+'
 function reviewsBlock() {
-  const list = REVIEWS.slice(0, 5);
-  const avg = list.reduce((a, r) => a + r.stars, 0) / list.length;
-  const pct = Math.round(list.filter(r => r.stars >= 4).length / list.length * 100);
   return `<section id="reviews" class="wrap mt-10">
     <div class="eyebrow">${ic('messages-square')} COMMUNITY</div>
     <h2 class="font-display font-bold text-3xl mt-1">What users are saying</h2>
-    <div class="card mt-4 py-4 grid grid-cols-3 text-center">
-      <div><div class="font-display font-bold text-2xl flex items-center justify-center gap-1.5">${avg.toFixed(1)} <span class="star-on">${ic('star', 'star-on i-lg')}</span></div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)] mt-1">AVERAGE RATING</div></div>
-      <div class="border-x border-[var(--line)]"><div class="font-display font-bold text-2xl">${ACTIVE_USERS}</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)] mt-1">ACTIVE USERS</div></div>
-      <div><div class="font-display font-bold text-2xl">${pct}%</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)] mt-1">RATED 4+</div></div>
-    </div>
-    <div class="mt-3 space-y-3">${list.map((r, k) => `<div class="card p-4">
-      <div class="flex items-center gap-3">
-        <div class="w-12 h-12 rounded-full flex-none flex items-center justify-center text-white font-display font-bold text-lg" style="background:${AVATARS[k % AVATARS.length]}">${esc((r.name.trim()[0] || '?').toUpperCase())}</div>
-        <div class="flex-1 min-w-0"><div class="font-display font-bold truncate">${esc(r.name)}</div><div class="text-xs text-[var(--mute)]">${esc(r.date)}</div></div>
-        <div class="flex gap-0.5 flex-none">${starRow(r.stars)}</div>
-      </div>
-      <p class="text-sm italic text-slate-600 mt-3">\u201C${esc(r.text)}\u201D</p></div>`).join('')}</div>
+    <a href="#/feedback" class="card mt-4 p-4 flex items-center gap-3"><div class="w-11 h-11 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic('message-square-plus')}</div><div class="flex-1"><div class="font-display font-bold">Share your feedback</div><p class="text-sm text-[var(--mute)]">Tell us what is working and what to improve.</p></div>${ic('chevron-right', 'text-slate-400')}</a>
   </section>`;
 }
 
@@ -423,7 +389,7 @@ V.landing = () => `
       <div class="flex items-center gap-3 mt-7 flex-wrap">
         <a href="#/register" class="btn btn-primary">GET STARTED ${ic('wand-sparkles')}</a>
         <a href="#/login" class="btn btn-ghost">${ic('log-in')} SIGN IN</a>
-        <a href="#reviews" data-action="scroll" data-target="reviews" class="font-semibold text-[var(--mute)] flex items-center gap-1">See Reviews ${ic('chevron-right')}</a>
+        <a href="#how" data-action="scroll" data-target="how" class="font-semibold text-[var(--mute)] flex items-center gap-1">See how it works ${ic('chevron-right')}</a>
       </div>
       <div class="grid grid-cols-3 gap-3 mt-8">
         ${[['users', '#f5f3ff', '#9333ea', '7', 'LEAGUES'], ['trophy', '#fffbeb', '#d97706', 'Margin', 'REVEALED'], ['chart-line', '#ecfdf5', '#059669', 'Random', 'OUTCOMES']]
@@ -466,7 +432,7 @@ V.landing = () => `
     ${lobbyBanner()}
     <div class="dark-card p-6 mt-4 text-center">
       <h3 class="font-display font-bold text-2xl">Ready to read the odds?</h3>
-      <p class="text-slate-300 text-[15px] mt-2">Create a free account and choose a package when you are ready.</p>
+      <p class="text-slate-300 text-[15px] mt-2">Create an account to get started. A one-time GH\u20B5 50 activation fee applies.</p>
       <a href="#/register" class="btn btn-primary w-full mt-5">GET STARTED ${ic('arrow-right')}</a>
       <p class="text-sm text-slate-400 mt-4">Already have an account? <a href="#/login" class="text-purple-300 font-bold underline">Log In</a></p>
     </div>
@@ -485,6 +451,7 @@ V.register = () => `${head('#/')}
       ${phoneField('Phone number', 'phone', '24 123 4567')}
       ${pwField('Password (min 6 characters)', 'password', 'new-password')}
       ${pwField('Confirm password', 'confirm', 'new-password')}
+      <div class="rounded-2xl p-3 text-sm flex gap-2" style="background:#faf5ff;border:1.5px solid #e9d5ff;color:#5b21b6"><span class="flex-none">${ic('info')}</span><span>A one-time <b>GH\u20B5 50.00</b> activation fee is required after sign-up before you can use the app. Pay with MTN MoMo or Telecel Cash.</span></div>
       <label class="flex gap-3 items-start text-sm"><input type="checkbox" name="terms" class="mt-1 w-4 h-4 accent-purple-600"> <span>I agree to the Terms &amp; Conditions and confirm I am 18 or older.</span></label>
       <p id="formErr" class="text-sm font-semibold text-red-600 hidden"></p>
       <button class="btn btn-primary w-full" type="submit">Create Account</button>
@@ -534,11 +501,13 @@ const initials = u => esc((u.first_name[0] || '') + (u.last_name[0] || ''));
 const blob = '<div class="absolute -top-16 -right-16 w-64 h-64 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>';
 const miniPhone = '<div class="w-24 rounded-[18px] p-1 bg-slate-800 shadow-lg flex-none self-start"><div class="rounded-[14px] overflow-hidden bg-slate-900" style="aspect-ratio:498/1080"><img src="lobby.jpg" alt="Instant Football lobby" class="w-full h-full object-cover object-top" loading="lazy"></div></div>';
 
-function statBlocks() {
+/* Three stat blocks: same layout and colours as the reference, but every number is real. */
+function statBlocks(u) {
+  const topped = u.tx.filter(t => t.type === 'deposit' && t.status === 'successful').reduce((a, t) => a + Number(t.amount), 0);
   const items = [
-    ['chart-line', 'linear-gradient(180deg,#ecfdf5,#d1fae5)', '#86efac', '#059669', STATS.readings, 'READINGS DONE'],
-    ['trophy', 'linear-gradient(180deg,#fffbeb,#fef3c7)', '#fcd34d', '#d97706', STATS.topped, 'TOTAL TOPPED UP'],
-    ['users', 'linear-gradient(180deg,#fff1f2,#ffe4e6)', '#fda4af', '#e11d48', STATS.members, 'MEMBERS']
+    ['chart-line', 'linear-gradient(180deg,#ecfdf5,#d1fae5)', '#86efac', '#059669', String(u.scanCount), 'READINGS DONE'],
+    ['trophy', 'linear-gradient(180deg,#fffbeb,#fef3c7)', '#fcd34d', '#d97706', 'GH\u20B5 ' + Math.round(topped).toLocaleString(), 'TOTAL TOPPED UP'],
+    ['users', 'linear-gradient(180deg,#fff1f2,#ffe4e6)', '#fda4af', '#e11d48', state.members == null ? '-' : state.members.toLocaleString(), 'MEMBERS']
   ];
   return `<div class="grid grid-cols-3 gap-3">${items.map(([i, bg, bd, c, n, l]) => `<div class="rounded-[22px] py-4 px-1.5 text-center" style="background:${bg};border:1.5px solid ${bd}">
     <div class="w-10 h-10 mx-auto rounded-xl bg-white/70 flex items-center justify-center" style="color:${c}">${ic(i)}</div>
@@ -661,7 +630,7 @@ V.packages = u => {
         <button data-action="paypack" data-id="${p.id}" class="btn w-full !py-3 text-sm bg-slate-900 text-white">${ic('smartphone')} Pay with MoMo</button>
       </div>
     </div>`).join('')}</div>
-  <p class="wrap text-xs text-[var(--mute)] mt-4">Paying with MoMo uses secure Paystack checkout (MTN MoMo, Telecel Cash, AT Money) and credits your account automatically. Or <a href="#/deposit" class="font-bold text-purple-700">add cash to your wallet</a> first.</p>
+  <p class="wrap text-xs text-[var(--mute)] mt-4">Paying with MoMo uses secure Paystack checkout (MTN MoMo and Telecel Cash) and credits your account automatically. Or <a href="#/deposit" class="font-bold text-purple-700">add cash to your wallet</a> first.</p>
   <div class="h-28"></div>`;
 };
 
@@ -676,7 +645,7 @@ V.deposit = u => {
       <div><span class="label">Choose an amount (GH\u20B5)</span>
         <div class="grid grid-cols-4 gap-2">${PRESETS.map(a => `<button data-action="preset" data-v="${a}" class="rounded-2xl py-3 text-sm font-bold border-[1.5px] border-[var(--line)] bg-white">${a}</button>`).join('')}</div></div>
       <div><label class="label" for="depAmount">Or enter an amount</label><input id="depAmount" class="input" type="number" min="1" max="5000" inputmode="decimal" placeholder="100"></div>
-      <div class="rounded-2xl bg-slate-50 p-3 text-sm flex gap-2 text-slate-700"><span class="text-emerald-600 flex-none">${ic('shield-check')}</span><span>Secure checkout by Paystack for MTN MoMo, Telecel Cash and AT Money. You approve the payment on your phone.</span></div>
+      <div class="rounded-2xl bg-slate-50 p-3 text-sm flex gap-2 text-slate-700"><span class="text-emerald-600 flex-none">${ic('shield-check')}</span><span>Secure checkout by Paystack for MTN MoMo and Telecel Cash. You approve the payment on your phone.</span></div>
       <p id="formErr" class="text-sm font-semibold text-red-600 hidden"></p>
       <button data-action="paydeposit" class="btn btn-primary w-full">${ic('smartphone')} Pay with MoMo</button>
     </div>
@@ -912,21 +881,23 @@ async function sendToDeveloper(payload) {
 }
 
 V.profile = u => {
+  const act = u.tx.find(t => t.type === 'activation' && t.status === 'successful');
+  const fee = act ? Math.abs(Number(act.amount)) : ACTIVATION_FEE;
   const list = u.tx.filter(t => state.txFilter === 'all' || t.status === state.txFilter);
   return `${pageTitle('Profile')}
   <div class="wrap mt-4">
     <div class="card p-5">
       <div class="flex items-center gap-4"><div class="w-16 h-16 rounded-full grad text-white flex items-center justify-center font-display font-bold text-2xl">${esc((u.first_name[0] || '') + (u.last_name[0] || ''))}</div>
-        <div><div class="font-display font-bold text-xl">${esc([u.first_name, u.other_name, u.last_name].filter(Boolean).join(' '))}</div><span class="chip text-xs !bg-emerald-50 !text-emerald-700 !border-emerald-200">${ic('badge-check')} Active member</span></div></div>
+        <div><div class="font-display font-bold text-xl">${esc([u.first_name, u.other_name, u.last_name].filter(Boolean).join(' '))}</div><span class="chip text-xs !bg-emerald-50 !text-emerald-700 !border-emerald-200">${ic('badge-check')} Active License Member</span></div></div>
       <dl class="mt-4 text-sm space-y-2.5">
         <div class="flex justify-between"><dt class="text-[var(--mute)]">Email</dt><dd class="font-semibold">${esc(u.email)}</dd></div>
         <div class="flex justify-between"><dt class="text-[var(--mute)]">Phone</dt><dd class="font-semibold">+233 ${esc(u.phone)}</dd></div>
-        <div class="flex justify-between"><dt class="text-[var(--mute)]">Account type</dt><dd class="font-semibold">Standard</dd></div>
+        <div class="flex justify-between"><dt class="text-[var(--mute)]">License type</dt><dd class="font-semibold text-emerald-600">Permanent license (${money(fee)})</dd></div>
       </dl>
     </div>
     <div class="card p-5 mt-4">
       <div class="font-display font-bold flex items-center gap-2">${ic('receipt', 'text-purple-600')} Payment &amp; deposit history</div>
-      <div class="flex gap-2 overflow-x-auto py-3">${['all', 'pending', 'successful', 'failed'].map(f => `<button data-action="filter" data-v="${f}" class="chip capitalize flex-none ${state.txFilter === f ? '!bg-purple-600 !text-white !border-purple-600' : ''}">${f}</button>`).join('')}</div>
+      <div class="flex gap-2 overflow-x-auto py-3">${['all', 'pending', 'successful', 'failed', 'canceled'].map(f => `<button data-action="filter" data-v="${f}" class="chip capitalize flex-none ${state.txFilter === f ? '!bg-purple-600 !text-white !border-purple-600' : ''}">${f}</button>`).join('')}</div>
       <div class="divide-y divide-[var(--line)]">
         ${list.length ? list.map(t => `<div class="py-3 flex items-center gap-3"><div class="flex-1 min-w-0"><div class="font-semibold text-sm truncate">${esc(t.label)}</div><div class="text-xs text-[var(--mute)]">${esc(t.reference || t.id.slice(0, 8).toUpperCase())} &middot; ${fmtDate(t.created_at)}</div></div>
           <div class="text-right"><div class="font-bold text-sm">${t.amount < 0 ? '-' : '+'}${money(Math.abs(t.amount))}</div><span class="status-${t.status} text-[11px] font-bold px-2 py-0.5 rounded-full capitalize">${t.status}</span></div></div>`).join('') : '<p class="text-sm text-[var(--mute)] py-4 text-center">No transactions yet.</p>'}
@@ -946,15 +917,58 @@ V.profile = u => {
 /* =========================================================
    Paystack checkout + live wallet updates
    ========================================================= */
+/* =========================================================
+   Popups, account activation and Paystack checkout
+   ========================================================= */
+const ACTIVATION_FEE = 50; // display only. The server (paystack-init) is the authority on the amount.
+
+function popup({ icon = 'circle-check', tone = 'green', title, text, button = 'Continue' }) {
+  return new Promise(resolve => {
+    const t = tone === 'purple' ? ['#f5f3ff', '#7c3aed'] : ['#ecfdf5', '#059669'];
+    const bg = document.createElement('div');
+    bg.className = 'modal-bg'; bg.setAttribute('role', 'dialog'); bg.setAttribute('aria-modal', 'true');
+    bg.innerHTML = `<div class="modal"><div class="w-16 h-16 mx-auto rounded-full flex items-center justify-center" style="background:${t[0]};color:${t[1]}">${ic(icon, '!w-8 !h-8')}</div>
+      <h3 class="font-display font-bold text-2xl mt-4">${esc(title)}</h3><p class="text-[15px] text-[var(--mute)] mt-2">${esc(text)}</p>
+      <button class="btn btn-primary w-full mt-5" data-modal-ok>${esc(button)}</button></div>`;
+    document.body.appendChild(bg); lucide.createIcons();
+    const ok = bg.querySelector('[data-modal-ok]');
+    ok.addEventListener('click', () => { bg.remove(); resolve(); });
+    ok.focus();
+  });
+}
+
+V.activate = u => `<div style="min-height:100vh;background:linear-gradient(180deg,#fafaff 0%,#f3e8ff 100%)">
+  <div class="wrap pt-6 pb-10">
+    <div class="rounded-[28px] bg-white p-5" style="border:1.5px solid #e9d5ff;box-shadow:0 24px 50px -28px rgba(124,58,237,.45)">
+      <div class="flex items-center justify-between">
+        <a href="#/" class="w-11 h-11 rounded-xl border border-[var(--line)] bg-slate-50 flex items-center justify-center" aria-label="Back">${ic('arrow-left')}</a>
+        <span class="chip !bg-purple-50 !text-purple-700 !border-purple-200 font-bold">${ic('shield-check')} Secured by Paystack</span>
+      </div>
+      <h1 class="font-display font-bold text-3xl mt-5">Account Activation</h1>
+      <p class="text-[var(--mute)] mt-2">Hi ${esc(u.first_name)}, complete the one-time payment to activate your account and start using the odds reader.</p>
+      <div class="rounded-[22px] p-5 mt-5 flex items-center justify-between gap-3 text-white" style="background:linear-gradient(135deg,#0f1226,#1e1b4b);box-shadow:0 16px 30px -18px rgba(15,18,38,.8)">
+        <div><div class="text-[11px] font-extrabold tracking-wider text-purple-300">ONE-TIME ACTIVATION FEE</div><div class="text-sm text-slate-300 mt-1">Pay once. No monthly charge.</div></div>
+        <div class="font-display font-bold text-3xl whitespace-nowrap">${money(ACTIVATION_FEE)}</div>
+      </div>
+      <label class="label mt-5">Email address</label>
+      <div class="relative"><span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">${ic('mail')}</span><input class="input !pl-12 !bg-slate-50" value="${esc(u.email)}" readonly aria-readonly="true"></div>
+      <p class="text-sm text-[var(--mute)] mt-4">Pay with <b>MTN MoMo</b> or <b>Telecel Cash</b>. You enter your MoMo number in the secure checkout and approve the payment on your phone.</p>
+      <p class="text-xs text-[var(--mute)] mt-2">Coins, diamonds and readings are bought separately.</p>
+      <button data-action="payactivate" class="btn btn-primary w-full mt-5 !py-4">${ic('zap')} Pay ${money(ACTIVATION_FEE)} with MoMo ${ic('zap')}</button>
+      <p class="text-center text-xs text-[var(--mute)] mt-4 flex items-center justify-center gap-1.5"><span class="text-emerald-600">${ic('lock', '!w-3.5 !h-3.5')}</span> MTN &bull; Telecel | Payments by Paystack</p>
+    </div>
+    <button data-action="logout" class="block mx-auto mt-5 text-sm font-bold text-slate-500 underline">Sign out</button>
+  </div></div>`;
+
+/* Returns 'successful' | 'failed' | 'canceled' | 'pending'. Callers decide what to show. */
 async function confirmPayment(ref) {
   for (let i = 0; i < 8; i++) {
     const r = await callFn('paystack-verify', { reference: ref });
-    if (r.status === 'successful') { toast('Payment received. Your balance is updated.'); await render(true); return; }
-    if (r.status === 'failed') { toast('The payment did not go through. You were not charged.'); await render(true); return; }
+    if (r.status === 'successful') return 'successful';
+    if (r.status === 'failed') return 'failed';
     await new Promise(res => setTimeout(res, 2500));
   }
-  toast('Still waiting for confirmation. Your balance updates automatically when it arrives.');
-  await render(true);
+  return 'pending';
 }
 async function pay(payload) {
   if (typeof PaystackPop === 'undefined') throw 'Paystack could not load. Check your connection and try again.';
@@ -966,9 +980,20 @@ async function pay(payload) {
       onError: e => reject((e && e.message) || 'The payment could not start.')
     });
   });
-  if (outcome === 'cancel') { toast('Payment cancelled.'); await render(true); return; }
+  if (outcome === 'cancel') {
+    // Closing the pop-up marks the transaction Canceled (unless Paystack says it was actually paid).
+    try { const r = await callFn('paystack-verify', { reference: init.reference, cancel: true }); return r.status === 'successful' ? 'successful' : 'canceled'; }
+    catch { return 'canceled'; }
+  }
   toast('Confirming your payment...');
-  await confirmPayment(init.reference);
+  return confirmPayment(init.reference);
+}
+async function settle(status, okMsg) {
+  if (status === 'successful') toast(okMsg);
+  else if (status === 'failed') toast('The payment did not go through. You were not charged.');
+  else if (status === 'canceled') toast('Payment canceled.');
+  else toast('Still waiting for confirmation. Your balance updates automatically when it arrives.');
+  await render(true);
 }
 
 let wallet = null;
@@ -978,13 +1003,13 @@ function watchWallet(uid) {
   const ch = sb.channel('wallet-' + uid)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: 'id=eq.' + uid }, () => {
       const page = location.hash.replace(/^#\/?/, '');
-      if (['dashboard', 'packages', 'deposit', 'profile'].includes(page)) render(true);
+      if (['dashboard', 'packages', 'deposit', 'profile', 'activate'].includes(page)) render(true);
     })
     .subscribe();
   wallet = { uid, ch };
 }
 
-const PROTECTED = ['dashboard', 'packages', 'deposit', 'predict', 'profile', 'feedback', 'report'];
+const PROTECTED = ['dashboard', 'packages', 'deposit', 'predict', 'profile', 'feedback', 'report', 'activate'];
 const GUEST_ONLY = ['login', 'register'];
 let renderTok = 0;
 async function render(keep) {
@@ -1001,6 +1026,10 @@ async function render(keep) {
   if (s) { me = await loadMe(); if (!me && PROTECTED.includes(name)) { toast('Could not load your account. Check the Supabase setup.'); } }
   if (tok !== renderTok) return;
   if (PROTECTED.includes(name) && !me) { $('#app').innerHTML = head('') + '<div class="wrap pt-6"><p class="text-[var(--mute)]">Account data is unavailable. Make sure schema.sql has been run in Supabase, then refresh.</p></div>'; return; }
+  if (me && PROTECTED.includes(name)) {
+    if (!me.activated && name !== 'activate') { location.hash = '#/activate'; return; }
+    if (me.activated && name === 'activate') { location.hash = '#/dashboard'; return; }
+  }
   if (me) watchWallet(me.id);
   const html = V[name](me);
   const showNav = me && ['dashboard', 'packages', 'profile', 'feedback', 'report'].includes(name);
@@ -1029,9 +1058,16 @@ document.addEventListener('submit', async e => {
     if (type === 'register') {
       const live = await Auth.register({ first: fd.get('first') || '', other: fd.get('other') || '', last: fd.get('last') || '', email: fd.get('email') || '', phone: fd.get('phone') || '', password: fd.get('password') || '', confirm: fd.get('confirm') || '', terms: !!fd.get('terms') });
       if (!live) { showErr(''); toast('Check your email to confirm your account, then sign in.'); location.hash = '#/login'; return; }
-      toast('Account created.');
+      await loadMe();
+      await popup({ title: 'Account created!', text: 'Welcome, ' + (fd.get('first') || '').trim() + '. One last step: pay the one-time activation fee to start using the app.', button: 'Continue to activation' });
+      location.hash = '#/activate'; await render(); return;
     } else if (type === 'login') {
       await Auth.login(fd.get('identifier') || '', fd.get('password') || '', !!fd.get('remember'));
+      const me = await loadMe();
+      if (!me) throw 'Could not load your account. Please try again.';
+      if (!me.activated) { toast('Account pending activation fee.'); location.hash = '#/activate'; await render(); return; }
+      await popup({ title: 'Login successful', text: 'Welcome back, ' + me.first_name + '!', button: 'Continue' });
+      location.hash = '#/dashboard'; await render(); return;
     } else if (type === 'reset') {
       const pw = fd.get('password') || '';
       if (pw.length < 6) throw 'Password must be at least 6 characters.';
@@ -1074,10 +1110,18 @@ document.addEventListener('click', async e => {
       const amount = Number(($('#depAmount') || {}).value);
       if (!(amount >= 1 && amount <= 5000)) return showErr('Enter an amount between GH\u20B51 and GH\u20B55,000.');
       showErr(''); b.disabled = true;
-      go(() => pay({ kind: 'deposit', amount })).finally(() => { b.disabled = false; });
+      go(async () => { await settle(await pay({ kind: 'deposit', amount }), 'Payment received. Your balance is updated.'); }).finally(() => { b.disabled = false; });
       break;
     }
-    case 'paypack': b.disabled = true; go(() => pay({ kind: 'package', package_id: b.dataset.id })).finally(() => { b.disabled = false; }); break;
+    case 'paypack': b.disabled = true; go(async () => { await settle(await pay({ kind: 'package', package_id: b.dataset.id }), 'Payment received. Your package is added.'); }).finally(() => { b.disabled = false; }); break;
+    case 'payactivate': b.disabled = true; go(async () => {
+      const st = await pay({ kind: 'activation' });
+      if (st === 'successful') {
+        await loadMe();
+        await popup({ title: 'Account activated', text: 'Your payment was received. Welcome aboard!', button: 'Go to dashboard' });
+        location.hash = '#/dashboard'; await render();
+      } else await settle(st, '');
+    }).finally(() => { b.disabled = false; }); break;
     case 'refresh': render(); break;
     case 'filter': state.txFilter = v; render(); break;
     case 'star': state.fbDraft = ($('#fbText') || {}).value || ''; state.fbRating = Number(v); render(true); break;
