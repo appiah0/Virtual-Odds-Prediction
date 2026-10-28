@@ -94,6 +94,12 @@ const TIERS = {
     { id: 'master_vip', name: 'Master VIP', amount: 80, n: 5, desc: 'Match readings, detailed',        icon: 'wand-sparkles', tile: 'linear-gradient(135deg,#f43f5e,#be123c)', fg: '#fff' }
   ]
 };
+  /* Static stats on the dashboard. Edit by hand. */
+const STATS = {
+  readings: '1,240',            // EDIT
+  topped:   'GH\u20B5 18,500',  // EDIT
+  members:  '320'               // EDIT
+};
 const COIN_PACKS = [
   { id: 'starter', name: 'Starter Coins Pack', price: 350,  desc: '1,000 coins. Enough for 1 Bronze reading.' },
   { id: 'pro',     name: 'Pro Coins Pack',     price: 700,  desc: '2,500 coins. Enough for 1 Silver Pro reading.', popular: true },
@@ -153,14 +159,12 @@ const P = { step: 'tiers', kind: 'coins', tier: null, dataUrl: null, error: '', 
 async function loadMe() {
   const s = await session();
   if (!s) { state.me = null; return null; }
-  const [p, t, sc, mc] = await Promise.all([
+  const [p, t, sc] = await Promise.all([
     sb.from('profiles').select('*').eq('id', s.user.id).maybeSingle(),
     sb.from('transactions').select('*').order('created_at', { ascending: false }).limit(100),
     sb.from('scans').select('id,tier,allowed,created_at', { count: 'exact' }).order('created_at', { ascending: false }).limit(5),
-    sb.rpc('member_count')
   ]);
   if (!p.data) { state.me = null; return null; }
-  state.members = mc.data == null ? null : Number(mc.data);
   state.me = { email: s.user.email, ...p.data, cash: Number(p.data.cash), tx: t.data || [], scans: sc.data || [], scanCount: sc.count || 0 };
   return state.me;
 }
@@ -263,26 +267,43 @@ function phoneField(label, name, ph) {
   return `<div><label class="label" for="${name}">${label}</label><div class="flex"><span class="flex items-center gap-1 px-3 rounded-l-[14px] border-[1.5px] border-r-0 border-[var(--line)] bg-slate-50 text-sm font-bold">+233</span><input class="input !rounded-l-none" id="${name}" name="${name}" type="tel" inputmode="tel" placeholder="${ph}"></div></div>`;
 }
 
-/* Static reviews: exactly 5, no database, nothing visitors can submit. */
+/* Static reviews: exactly 5, no database. Edit by hand. Stars are 1-5. */
 const REVIEWS = [
-  { name: 'EDIT name', stars: 5, text: 'EDIT comment 1' },
-  { name: 'EDIT name', stars: 5, text: 'EDIT comment 2' },
-  { name: 'EDIT name', stars: 4, text: 'EDIT comment 3' },
-  { name: 'EDIT name', stars: 5, text: 'EDIT comment 4' },
-  { name: 'EDIT name', stars: 4, text: 'EDIT comment 5' }
+  { name: 'EDIT A.', date: '27 Oct, 23:04', stars: 5, text: 'EDIT comment 1' },
+  { name: 'EDIT B.', date: '26 Oct, 18:40', stars: 5, text: 'EDIT comment 2' },
+  { name: 'EDIT C.', date: '25 Oct, 09:15', stars: 4, text: 'EDIT comment 3' },
+  { name: 'EDIT D.', date: '24 Oct, 21:02', stars: 5, text: 'EDIT comment 4' },
+  { name: 'EDIT E.', date: '23 Oct, 14:30', stars: 4, text: 'EDIT comment 5' }
 ];
+const AVATARS = [
+  'linear-gradient(135deg,#fbbf24,#d97706)', // amber
+  'linear-gradient(135deg,#a855f7,#7c3aed)', // purple
+  'linear-gradient(135deg,#10b981,#047857)', // green
+  'linear-gradient(135deg,#f43f5e,#be123c)', // rose
+  'linear-gradient(135deg,#38bdf8,#0369a1)'  // blue
+];
+function starRow(n, cls = '!w-[18px] !h-[18px]') {
+  return [1, 2, 3, 4, 5].map(i => ic('star', (i <= n ? 'star-on' : 'star-off') + ' ' + cls)).join('');
+}
 function reviewsBlock() {
+  const list = REVIEWS.slice(0, 5);
+  const avg = list.reduce((a, r) => a + r.stars, 0) / list.length;
+  const pct = Math.round(list.filter(r => r.stars >= 4).length / list.length * 100);
   return `<section id="reviews" class="wrap mt-10">
     <div class="eyebrow">${ic('messages-square')} COMMUNITY</div>
     <h2 class="font-display font-bold text-3xl mt-1">What users are saying</h2>
-    <div class="mt-4 space-y-3">${REVIEWS.slice(0, 5).map(r => `<div class="card p-4">
+    <div class="card mt-4 py-4 grid grid-cols-3 text-center">
+      <div><div class="font-display font-bold text-2xl flex items-center justify-center gap-1.5">${avg.toFixed(1)} <span class="star-on">${ic('star', 'star-on i-lg')}</span></div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)] mt-1">AVERAGE RATING</div></div>
+      <div class="border-x border-[var(--line)]"><div class="font-display font-bold text-2xl">${list.length}</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)] mt-1">REVIEWS</div></div>
+      <div><div class="font-display font-bold text-2xl">${pct}%</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)] mt-1">RATED 4+</div></div>
+    </div>
+    <div class="mt-3 space-y-3">${list.map((r, k) => `<div class="card p-4">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-full grad text-white flex items-center justify-center font-display font-bold flex-none">${esc(r.name.trim()[0] || '?')}</div>
-        <div class="flex-1 min-w-0"><div class="font-display font-bold truncate">${esc(r.name)}</div>
-          <div class="flex gap-0.5">${[1, 2, 3, 4, 5].map(i => ic('star', (i <= r.stars ? 'star-on' : 'star-off') + ' !w-4 !h-4')).join('')}</div></div>
+        <div class="w-12 h-12 rounded-full flex-none flex items-center justify-center text-white font-display font-bold text-lg" style="background:${AVATARS[k % AVATARS.length]}">${esc((r.name.trim()[0] || '?').toUpperCase())}</div>
+        <div class="flex-1 min-w-0"><div class="font-display font-bold truncate">${esc(r.name)}</div><div class="text-xs text-[var(--mute)]">${esc(r.date)}</div></div>
+        <div class="flex gap-0.5 flex-none">${starRow(r.stars)}</div>
       </div>
-      <p class="text-sm text-[var(--mute)] mt-3">${esc(r.text)}</p></div>`).join('')}</div>
-    <a href="#/feedback" class="card mt-4 p-4 flex items-center gap-3"><div class="w-11 h-11 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic('message-square-plus')}</div><div class="flex-1"><div class="font-display font-bold">Share your feedback</div><p class="text-sm text-[var(--mute)]">Goes privately to the developer.</p></div>${ic('chevron-right', 'text-slate-400')}</a>
+      <p class="text-sm italic text-slate-600 mt-3">\u201C${esc(r.text)}\u201D</p></div>`).join('')}</div>
   </section>`;
 }
 
@@ -512,13 +533,11 @@ const initials = u => esc((u.first_name[0] || '') + (u.last_name[0] || ''));
 const blob = '<div class="absolute -top-16 -right-16 w-64 h-64 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>';
 const miniPhone = '<div class="w-24 rounded-[18px] p-1 bg-slate-800 shadow-lg flex-none self-start"><div class="rounded-[14px] overflow-hidden bg-slate-900" style="aspect-ratio:498/1080"><img src="lobby.jpg" alt="Instant Football lobby" class="w-full h-full object-cover object-top" loading="lazy"></div></div>';
 
-/* Three stat blocks: same layout and colours as the reference, but every number is real. */
-function statBlocks(u) {
-  const topped = u.tx.filter(t => t.type === 'deposit' && t.status === 'successful').reduce((a, t) => a + Number(t.amount), 0);
+function statBlocks() {
   const items = [
-    ['chart-line', 'linear-gradient(180deg,#ecfdf5,#d1fae5)', '#86efac', '#059669', String(u.scanCount), 'READINGS DONE'],
-    ['trophy', 'linear-gradient(180deg,#fffbeb,#fef3c7)', '#fcd34d', '#d97706', 'GH\u20B5 ' + Math.round(topped).toLocaleString(), 'TOTAL TOPPED UP'],
-    ['users', 'linear-gradient(180deg,#fff1f2,#ffe4e6)', '#fda4af', '#e11d48', state.members == null ? '-' : state.members.toLocaleString(), 'MEMBERS']
+    ['chart-line', 'linear-gradient(180deg,#ecfdf5,#d1fae5)', '#86efac', '#059669', STATS.readings, 'READINGS DONE'],
+    ['trophy', 'linear-gradient(180deg,#fffbeb,#fef3c7)', '#fcd34d', '#d97706', STATS.topped, 'TOTAL TOPPED UP'],
+    ['users', 'linear-gradient(180deg,#fff1f2,#ffe4e6)', '#fda4af', '#e11d48', STATS.members, 'MEMBERS']
   ];
   return `<div class="grid grid-cols-3 gap-3">${items.map(([i, bg, bd, c, n, l]) => `<div class="rounded-[22px] py-4 px-1.5 text-center" style="background:${bg};border:1.5px solid ${bd}">
     <div class="w-10 h-10 mx-auto rounded-xl bg-white/70 flex items-center justify-center" style="color:${c}">${ic(i)}</div>
