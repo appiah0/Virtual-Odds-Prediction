@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#7c3aed">
-<title>INSTANTVIRTUALS - Virtual football odds reader</title>
+<title>Virtual Odds Prediction - virtual football odds reader</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
 tailwind.config = { theme: { extend: { fontFamily: { display: ['Outfit','sans-serif'], sans: ['Plus Jakarta Sans','sans-serif'] } } } };
@@ -70,13 +72,13 @@ html,body{background:#fff;color:var(--ink);font-family:'Plus Jakarta Sans',sans-
    The Claude API key is NOT here. It lives in a Supabase Edge Function secret.
    ========================================================= */
 const CONFIG = window.CONFIG || {
-  brand: 'INSTANTVIRTUALS',
   SUPABASE_URL: 'https://hyxrwhgakduytptasihp.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_lJKyhjDgsKNZATFaDDwgNg_6vwJ2V_n',
-  support: { email: 'support@yourdomain.com', whatsapp: '233533327517', telegram: 'VirtualOddsPrediction' },
+  support: { email: 'support@yourdomain.com', whatsapp: '233XXXXXXXXX', telegram: 'YourTelegramHandle' },
   lobbyUrl: 'https://www.sportybet.com/gh/'
 };
 const CONFIGURED = !CONFIG.SUPABASE_URL.includes('YOUR-PROJECT');
+const BRAND = 'Virtual Odds Prediction';
 
 /* Display copy for tiers. The server (scan-odds function) holds the authoritative costs and match limits. */
 const TIERS = {
@@ -247,7 +249,7 @@ const FAQ = [
 function head(back) {
   return `<div class="wrap pt-5 pb-3 flex items-center gap-3">
     ${back ? `<a href="${back}" class="w-10 h-10 rounded-full border border-[var(--line)] flex items-center justify-center" aria-label="Back">${ic('arrow-left')}</a>` : ''}
-    <div class="font-display font-extrabold text-xl grad-text">${CONFIG.brand}</div></div>`;
+    <img src="logo.png" alt="" class="w-10 h-10 rounded-full"><div class="font-display font-extrabold text-xl grad-text">${BRAND}</div></div>`;
 }
 function nav(active) {
   const items = [['dashboard', 'Home', 'house'], ['packages', 'Packages', 'package'], ['predict', 'Predictions', 'brain'], ['guide', 'Guide', 'book-open'], ['about', 'About', 'info'], ['profile', 'Profile', 'user-round']];
@@ -336,13 +338,13 @@ function aboutBlock() {
 
 function footer() {
   return `<footer class="wrap mt-8 pb-10">
-    <div class="flex items-center justify-center gap-3 flex-wrap"><span class="font-display font-bold tracking-wide">VIRTUAL ODDS READER</span><span class="chip text-xs">18+ ONLY &middot; PLAY RESPONSIBLY</span></div>
+    <div class="flex items-center justify-center gap-3 flex-wrap"><span class="font-display font-bold tracking-wide uppercase">${BRAND}</span><span class="chip text-xs">18+ ONLY &middot; PLAY RESPONSIBLY</span></div>
     <div class="mt-4 rounded-2xl p-4" style="background:#fffbeb;border:1.5px solid #fde68a;border-left:5px solid #f59e0b">
       <div class="font-display font-bold flex items-center gap-2" style="color:#92400e">${ic('triangle-alert')} Financial advisory &amp; risk notice</div>
       <p class="text-sm mt-2" style="color:#78350f">This tool reads odds from your screenshot and explains what they imply. It does <b>not</b> predict results. Virtual football outcomes are random, and losses are part of the game.</p>
       <p class="text-sm mt-2" style="color:#78350f">Only stake money you can comfortably afford to lose. If gambling stops being fun, take a break and speak to someone you trust.</p>
     </div>
-    <p class="text-center text-xs text-[var(--mute)] mt-5">&copy; 2026 Virtual Odds Reader Ghana. Not affiliated with SportyBet or any bookmaker.</p>
+    <p class="text-center text-xs text-[var(--mute)] mt-5">&copy; 2026 ${BRAND} Ghana. Not affiliated with SportyBet or any bookmaker.</p>
   </footer>`;
 }
 
@@ -392,9 +394,9 @@ V.landing = () => `
     <div class="absolute -top-14 -right-16 w-72 h-72 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>
     <div class="wrap pt-5 relative">
       <div class="flex items-center gap-3 rounded-full px-4 py-3 border-[1.5px] border-purple-200" style="background:linear-gradient(90deg,#faf5ff,#f3e8ff)">
-        <div class="w-9 h-9 grad rounded-xl flex items-center justify-center text-white">${ic('zap')}</div>
-        <span class="font-display font-extrabold text-purple-700 tracking-wide">${CONFIG.brand}</span>
-        <span class="w-px h-5 bg-purple-200"></span><span class="text-[13px] font-semibold text-[var(--mute)]">Virtual Football &middot; Odds Reader</span>
+        <img src="logo.png" alt="" class="w-10 h-10 rounded-full flex-none">
+        <span class="font-display font-extrabold text-purple-700 tracking-wide text-[15px]">${BRAND}</span>
+        <span class="hidden min-[430px]:block w-px h-5 bg-purple-200"></span><span class="hidden min-[430px]:block text-[13px] font-semibold text-[var(--mute)]">Virtual Football</span>
       </div>
       <h1 class="font-display font-bold text-[34px] leading-[1.15] mt-8">Upload an Instant Football screenshot and our AI <span class="grad-text">reads the odds</span> shown to explain what they imply &mdash; instantly.</h1>
       <p class="text-[var(--mute)] mt-4 text-[17px]">No hype, no guarantees. Just the maths behind the odds.</p>
@@ -420,10 +422,8 @@ V.landing = () => `
       <span class="chip" style="background:#fff;color:#047857;border-color:#a7f3d0">${ic('brain')} ODDS READER PREVIEW</span>
       <h2 class="font-display font-bold text-2xl mt-3 text-emerald-900">Instant Football Fixture Scanner</h2>
       <p class="text-emerald-800 text-[15px] mt-2">Take a screenshot of your match lobby (like below) and the reader pulls out every fixture and its odds in seconds.</p>
-      <div class="relative mx-auto mt-5 w-40 h-64 rounded-[22px] p-1.5 bg-slate-800 shadow-xl" style="transform:rotate(4deg)">
-        <div class="h-full rounded-[16px] bg-slate-900 overflow-hidden"><div class="h-6 bg-red-600"></div>
-          ${[0, 1, 2, 3, 4].map(() => `<div class="px-2 py-2 border-b border-slate-800"><div class="h-1.5 w-16 rounded bg-slate-600 mb-1.5"></div><div class="flex gap-1">${[0, 1, 2].map(() => '<div class="flex-1 h-4 rounded bg-slate-700"></div>').join('')}</div></div>`).join('')}
-        </div>
+      <div class="relative mx-auto mt-5 w-44 rounded-[26px] p-1.5 bg-slate-800 shadow-xl" style="transform:rotate(3deg)">
+        <div class="rounded-[20px] overflow-hidden bg-slate-900" style="aspect-ratio:498/1080"><img src="lobby.jpg" alt="Instant Football lobby screenshot" class="w-full h-full object-cover object-top" loading="lazy"></div>
       </div>
       <div class="inline-flex items-center gap-2 bg-slate-900 text-white text-xs font-semibold rounded-full px-3 py-2 -mt-3 relative"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>Reads: England, Spain, Germany &amp; more</div>
       <div class="mt-4"><a href="#/predict" class="btn btn-green">${ic('wand-sparkles')} TRY THE ODDS READER ${ic('arrow-right')}</a></div>
@@ -519,8 +519,7 @@ V.reset = () => `${head('')}
 const PRESETS = [50, 100, 200, 500];
 const initials = u => esc((u.first_name[0] || '') + (u.last_name[0] || ''));
 const blob = '<div class="absolute -top-16 -right-16 w-64 h-64 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>';
-const miniPhone = '<div class="w-24 h-40 rounded-[18px] p-1 bg-slate-800 shadow-lg flex-none"><div class="h-full rounded-[14px] bg-slate-900 overflow-hidden"><div class="h-4 bg-red-600"></div>' +
-  [0, 1, 2, 3, 4].map(() => '<div class="px-1.5 py-1.5 border-b border-slate-800"><div class="h-1 w-10 rounded bg-slate-600 mb-1"></div><div class="flex gap-0.5"><div class="flex-1 h-3 rounded-sm bg-slate-700"></div><div class="flex-1 h-3 rounded-sm bg-slate-700"></div><div class="flex-1 h-3 rounded-sm bg-slate-700"></div></div></div>').join('') + '</div></div>';
+const miniPhone = '<div class="w-24 rounded-[18px] p-1 bg-slate-800 shadow-lg flex-none self-start"><div class="rounded-[14px] overflow-hidden bg-slate-900" style="aspect-ratio:498/1080"><img src="lobby.jpg" alt="Instant Football lobby" class="w-full h-full object-cover object-top" loading="lazy"></div></div>';
 
 /* Three stat blocks: same layout and colours as the reference, but every number is real. */
 function statBlocks(u) {
@@ -540,7 +539,7 @@ V.dashboard = u => `
   <div class="relative overflow-hidden">
     ${blob}
     <div class="wrap pt-5 relative flex items-center justify-between">
-      <div class="flex items-center gap-3"><div class="w-12 h-12 rounded-full grad text-white font-display font-bold flex items-center justify-center shadow">${initials(u)}</div>
+      <div class="flex items-center gap-3"><img src="logo.png" alt="" class="w-12 h-12 rounded-full shadow">
         <div class="font-display font-bold text-xl">Welcome ${esc(u.first_name)}!</div></div>
       <button class="relative w-11 h-11 rounded-full bg-white border border-[var(--line)] flex items-center justify-center" data-action="bell" aria-label="Notifications">${ic('bell')}${u.tx.some(t => t.status === 'pending') ? '<span class="absolute top-2 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full"></span>' : ''}</button>
     </div>
@@ -624,7 +623,7 @@ V.packages = u => {
   return `<div class="relative overflow-hidden">
     ${blob}
     <div class="wrap pt-5 relative flex items-center justify-between">
-      <div class="flex items-center gap-3"><div class="w-12 h-12 rounded-full grad text-white font-display font-bold flex items-center justify-center shadow">${initials(u)}</div>
+      <div class="flex items-center gap-3"><img src="logo.png" alt="" class="w-12 h-12 rounded-full shadow">
         <div class="font-display font-bold text-xl">Welcome ${esc(u.first_name)}!</div></div>
       <button class="w-11 h-11 rounded-full bg-white border border-[var(--line)] flex items-center justify-center" data-action="bell" aria-label="Notifications">${ic('bell')}</button>
     </div>
