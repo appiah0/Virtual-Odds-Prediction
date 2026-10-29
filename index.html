@@ -64,6 +64,8 @@ html,body{background:#fff;color:var(--ink);font-family:'Plus Jakarta Sans',sans-
 .toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-120px);background:#0f1226;color:#fff;padding:12px 18px;border-radius:14px;font-size:14px;font-weight:600;z-index:100;transition:transform .3s;max-width:90vw}
 .toast.show{transform:translateX(-50%) translateY(0)}
 .status-pending{background:#fef3c7;color:#92400e}.status-successful{background:#d1fae5;color:#065f46}.status-failed{background:#fee2e2;color:#991b1b}.status-canceled{background:#e5e7eb;color:#374151}
+.scanline{position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,transparent,#22d3ee,transparent);box-shadow:0 0 14px 4px rgba(34,211,238,.55);animation:scan 2.2s ease-in-out infinite}
+@keyframes scan{0%{top:0}50%{top:calc(100% - 3px)}100%{top:0}}
 .modal-bg{position:fixed;inset:0;background:rgba(15,18,38,.55);backdrop-filter:blur(3px);z-index:90;display:flex;align-items:center;justify-content:center;padding:24px}
 .modal{background:#fff;border-radius:26px;max-width:360px;width:100%;padding:26px;text-align:center;box-shadow:0 30px 60px -20px rgba(15,18,38,.5);animation:pop .25s ease}
 @keyframes pop{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
@@ -82,9 +84,9 @@ html,body{background:#fff;color:var(--ink);font-family:'Plus Jakarta Sans',sans-
    The Claude API key is NOT here. It lives in a Supabase Edge Function secret.
    ========================================================= */
 const CONFIG = window.CONFIG || {
-  SUPABASE_URL: 'https://YOUR-PROJECT.supabase.co',
-  SUPABASE_ANON_KEY: 'YOUR-ANON-KEY',
-  support: { email: 'support@yourdomain.com', whatsapp: '233XXXXXXXXX', telegram: 'YourTelegramHandle' },
+  SUPABASE_URL: 'https://hyxrwhgakduytptasihp.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_lJKyhjDgsKNZATFaDDwgNg_6vwJ2V_n',
+  support: { email: 'support@VirtualOddsPrediction.com', whatsapp: '233533327517', telegram: 'VirtualOddsPrediction' },
   lobbyUrl: 'https://www.sportybet.com/gh/'
 };
 const CONFIGURED = !CONFIG.SUPABASE_URL.includes('YOUR-PROJECT');
@@ -160,7 +162,7 @@ async function callFn(name, body, authed = true) {
    State and data
    ========================================================= */
 const state = { me: null, members: null, packTab: 'coins', txFilter: 'all', fbRating: 0, fbDraft: '' };
-const P = { step: 'tiers', kind: 'coins', tier: null, dataUrl: null, error: '', scanId: null, fixtures: [], picks: [], allowed: 0, result: null, resultKind: 'coins' };
+const P = { step: 'tiers', kind: 'coins', tier: null, dataUrl: null, error: '', scanId: null, result: null, resultKind: 'coins', reference: '', found: 0 };
 
 async function loadMe() {
   const s = await session();
@@ -676,19 +678,55 @@ function tierRow(t, kind) {
     </div>${ic('chevron-right', 'text-purple-600 flex-none')}</button>`;
 }
 
-function resultCard(m, detailed) {
+function matchCard(m, detailed) {
   const a = Odds.analyse(m);
-  if (!a) return `<div class="card p-4 text-sm text-[var(--mute)]">${esc(m.home)} vs ${esc(m.away)}: odds were not readable.</div>`;
-  const cols = ['#7c3aed', '#94a3b8', '#db2777'], lbl = ['Home', 'Draw', 'Away'];
-  return `<div class="card p-4">
-    <div class="flex justify-between items-start gap-2"><div><div class="font-display font-bold">${esc(m.home)} <span class="text-slate-400 font-medium">vs</span> ${esc(m.away)}</div>${m.league ? `<div class="text-xs text-[var(--mute)]">${esc(m.league)}</div>` : ''}</div>
-      <span class="chip text-xs">${ic('trending-down')} Shortest price: ${a.fav}</span></div>
-    <div class="mt-3 space-y-2.5">${lbl.map((l, i) => `<div><div class="flex justify-between text-sm font-semibold"><span>${l} <span class="text-[var(--mute)] font-medium">@ ${a.odds[i].toFixed(2)}</span></span><span>${a.p[i].toFixed(1)}%</span></div><div class="bar mt-1"><span style="width:${a.p[i]}%;background:${cols[i]}"></span></div></div>`).join('')}</div>
-    ${detailed ? `<div class="mt-3 pt-3 border-t border-[var(--line)] text-sm space-y-1.5">
-      <div class="flex justify-between"><span class="text-[var(--mute)]">Bookmaker margin (1X2)</span><b>${a.margin.toFixed(1)}%</b></div>
-      ${a.ou ? `<div class="flex justify-between"><span class="text-[var(--mute)]">Over ${a.ou.line}</span><b>${a.ou.over.toFixed(1)}%</b></div><div class="flex justify-between"><span class="text-[var(--mute)]">Under ${a.ou.line}</span><b>${a.ou.under.toFixed(1)}%</b></div>` : '<div class="text-[var(--mute)]">No over/under market visible.</div>'}
-      <p class="text-xs text-[var(--mute)] pt-1">Probabilities are fair-price estimates after removing the margin. They describe the odds, not the result.</p></div>` : ''}
+  if (!a) return '';
+  const idx = a.p.indexOf(Math.max(...a.p));
+  const names = ['HOME WIN (1)', 'DRAW (X)', 'AWAY WIN (2)'], cap = ['Home', 'Draw', 'Away'], hd = ['1', 'X', '2'];
+  const seg = ['#22c55e', '#f59e0b', '#6d28d9'], txt = ['#16a34a', '#d97706', '#6d28d9'];
+  const chip = a.ou
+    ? (a.ou.over >= a.ou.under ? `Over ${a.ou.line} &middot; ${a.ou.over.toFixed(0)}%` : `Under ${a.ou.line} &middot; ${a.ou.under.toFixed(0)}%`)
+    : `Margin ${a.margin.toFixed(1)}%`;
+  const team = t => `<div class="rounded-2xl px-3 py-3 font-display font-bold text-xl bg-slate-50 text-center min-w-[78px]" style="border:1.5px solid #eef0f6">${esc(t)}</div>`;
+  return `<div class="rounded-[22px] p-4 bg-white" style="border:1.5px solid #e6e8f2;border-left:4px solid #6d28d9;box-shadow:0 12px 26px -20px rgba(15,18,38,.45)">
+    <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5 text-sm font-bold text-slate-700 flex-1 min-w-0"><span class="text-purple-700 flex-none">${ic('trophy', '!w-4 !h-4')}</span><span class="truncate">${esc(m.league || 'Virtual football')}</span></div>
+      <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg whitespace-nowrap" style="background:#ede9fe;color:#5b21b6">Match ${m.match_no}</span>
+      <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 whitespace-nowrap" style="background:#dcfce7;color:#166534">${ic('chart-pie', '!w-3.5 !h-3.5')} ${a.p[idx].toFixed(0)}% implied</span>
+    </div>
+    <div class="flex items-center justify-between mt-4">
+      ${team(m.home)}
+      <div class="text-center"><div class="w-9 h-9 rounded-full bg-slate-900 text-white text-xs font-bold flex items-center justify-center mx-auto">VS</div><div class="text-[10px] font-extrabold tracking-wider text-purple-700 mt-1">1X2</div></div>
+      ${team(m.away)}
+    </div>
+    <div class="grid grid-cols-3 gap-2.5 mt-4">${[0, 1, 2].map(i => `<div class="rounded-2xl py-3 text-center" style="${i === idx ? 'background:#f5f3ff;border:1.5px solid #7c3aed' : 'background:#fff;border:1.5px solid #eef0f6'}">
+      <div class="flex items-center justify-center gap-1 text-xs font-bold text-slate-500">${hd[i]}${i === idx ? '<span class="text-[9px] font-extrabold text-white px-1.5 py-0.5 rounded" style="background:#6d28d9">SHORTEST</span>' : ''}</div>
+      <div class="font-display font-bold text-xl mt-0.5">${a.odds[i].toFixed(2)}</div><div class="text-[11px] text-slate-400">${cap[i]}</div></div>`).join('')}</div>
+    <div class="flex h-1.5 rounded-full overflow-hidden mt-4" style="gap:2px">${a.p.map((v, i) => `<span style="flex:${v};background:${seg[i]}"></span>`).join('')}</div>
+    <div class="flex justify-between text-[11px] font-bold mt-1.5">${a.p.map((v, i) => `<span style="color:${txt[i]}">${hd[i]} (${cap[i]}): ${v.toFixed(0)}%</span>`).join('')}</div>
+    <div class="rounded-2xl mt-4 p-3.5 flex items-center gap-3 text-white" style="background:linear-gradient(135deg,#6d28d9,#4c1d95)">
+      <div class="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center flex-none">${ic('trending-down', 'i-lg')}</div>
+      <div class="flex-1 min-w-0"><div class="text-[10px] font-extrabold tracking-wider text-purple-200">SHORTEST PRICE</div><div class="font-display font-extrabold text-lg leading-tight">${names[idx]}</div></div>
+      <span class="text-xs font-bold rounded-lg px-2.5 py-1.5 bg-white/15 whitespace-nowrap">${chip}</span>
+    </div>
+    ${detailed ? `<div class="mt-3 text-sm text-[var(--mute)] flex flex-wrap gap-x-4 gap-y-1"><span>Bookmaker margin <b class="text-slate-800">${a.margin.toFixed(1)}%</b></span>${a.ou ? `<span>Over ${a.ou.line}: <b class="text-slate-800">${a.ou.over.toFixed(1)}%</b></span><span>Under ${a.ou.line}: <b class="text-slate-800">${a.ou.under.toFixed(1)}%</b></span>` : ''}</div>` : ''}
   </div>`;
+}
+function readingText() {
+  const lines = P.result.map(m => {
+    const a = Odds.analyse(m); if (!a) return '';
+    return `${m.match_no}) ${m.home} vs ${m.away}${m.league ? ' (' + m.league + ')' : ''}  1X2: ${a.odds.map(o => o.toFixed(2)).join(' / ')}  implied: ${a.p.map(v => v.toFixed(0) + '%').join(' / ')}  shortest price: ${a.fav}`;
+  }).filter(Boolean);
+  return `${BRAND} reading ${P.reference}\n${lines.join('\n')}\nThese figures describe the odds, not the result.`;
+}
+async function copyToClipboard(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.select(); let ok = false;
+    try { ok = document.execCommand('copy'); } catch {}
+    ta.remove(); return ok;
+  }
 }
 
 V.predict = u => {
@@ -713,7 +751,7 @@ V.predict = u => {
   let body = '';
   if (P.step === 'tiers') {
     body = `<div class="wrap mt-6"><h2 class="font-display font-bold text-2xl flex items-center gap-2">${ic('layers', 'text-purple-600 i-lg')} Select Your Reading Tier</h2>
-      <p class="text-[var(--mute)] mt-1 text-[15px]">Each tier unlocks a set number of matches from your screenshot. Pick one to continue.</p>
+      <p class="text-[var(--mute)] mt-1 text-[15px]">Each tier returns a set number of matches, chosen at random from the 1X2 fixtures in your screenshot. Pick one to continue.</p>
       <div class="grid grid-cols-2 gap-1 p-1.5 rounded-full bg-slate-100 mt-4">
         <button data-action="ptab" data-v="coins" class="btn !py-2.5 text-sm ${P.kind === 'coins' ? '!bg-white shadow' : '!bg-transparent text-slate-500'}">${ic('coins', 'text-amber-500')} Coins Plans</button>
         <button data-action="ptab" data-v="diamonds" class="btn !py-2.5 text-sm ${P.kind === 'diamonds' ? '!bg-white shadow' : '!bg-transparent text-slate-500'}">${ic('gem', 'text-purple-600')} VIP Diamonds</button>
@@ -724,9 +762,10 @@ V.predict = u => {
         <div class="flex justify-between items-center"><div class="font-display font-bold flex items-center gap-2" style="color:#92400e">${ic('triangle-alert')} Financial Advisory &amp; Risk Disclaimer</div><span class="chip !bg-red-50 !text-red-700 !border-red-200 text-[11px]">18+ RATED</span></div>
         <p class="text-sm mt-2" style="color:#78350f">Readings explain what the odds on your screenshot imply. They are not predictions and not guarantees. Virtual sports outcomes are random and carry real financial risk. Never stake money you cannot afford to lose.</p></div></div>`;
   } else if (P.step === 'scanning') {
-    body = `<div class="wrap mt-6"><div class="card p-6 text-center">
-      <div class="w-14 h-14 mx-auto grad rounded-2xl flex items-center justify-center text-white">${ic('scan-line', 'i-lg')}</div>
-      <div class="font-display font-bold mt-3">Claude vision reader active</div>
+    body = `<div class="wrap mt-6"><div class="card p-4 text-center">
+      <div class="relative rounded-2xl overflow-hidden bg-slate-900"><img src="${P.dataUrl}" alt="" class="mx-auto block opacity-90" style="max-height:260px"><div class="scanline"></div></div>
+      <div class="mt-4 rounded-2xl py-3 text-white font-display font-bold tracking-wide flex items-center justify-center gap-2" style="background:linear-gradient(135deg,#a855f7,#6d28d9)"><span class="spin flex">${ic('loader')}</span> SCANNING SCREENSHOT...</div>
+      <div class="font-display font-bold mt-4">Claude vision reader active</div>
       <p id="scanStatus" class="text-sm text-[var(--mute)] mt-1">Uploading screenshot</p>
       <div class="bar mt-4"><span id="scanBar" class="grad" style="width:0%"></span></div><div id="scanPct" class="text-sm font-bold mt-2">0%</div></div></div>`;
   } else if (P.step === 'upload') {
@@ -734,26 +773,24 @@ V.predict = u => {
     body = `<div class="wrap mt-6">
       <div class="card p-4 flex items-center gap-3 !border-purple-300 !bg-purple-50">
         <div class="w-12 h-12 rounded-2xl flex-none flex items-center justify-center" style="background:${t.tile};color:${t.fg}">${ic(t.icon)}</div>
-        <div class="flex-1"><div class="font-display font-bold">${t.name} &middot; ${t.amount.toLocaleString()} ${P.kind}</div><p class="text-xs text-[var(--mute)]">Unlocks ${t.n} match${t.n > 1 ? 'es' : ''} from your screenshot</p></div>
+        <div class="flex-1"><div class="font-display font-bold">${t.name} &middot; ${t.amount.toLocaleString()} ${P.kind}</div><p class="text-xs text-[var(--mute)]">Returns ${t.n} randomly chosen match${t.n > 1 ? 'es' : ''} from the 1X2 fixtures in your screenshot</p></div>
         <button data-action="changetier" class="text-sm font-bold text-purple-700">Change</button></div>
       <label id="drop" class="drop block p-6 text-center cursor-pointer mt-4" for="file">
         ${P.dataUrl ? `<img src="${P.dataUrl}" alt="Selected screenshot" class="max-h-64 mx-auto rounded-xl">` : `<div class="w-14 h-14 mx-auto rounded-2xl bg-white text-purple-600 flex items-center justify-center shadow">${ic('image-up', 'i-lg')}</div><div class="font-display font-bold mt-3">Upload match screenshot</div><p class="text-sm text-[var(--mute)] mt-1">Drag and drop, or tap to pick from your gallery.<br>PNG, JPG or WEBP</p>`}
         <input id="file" type="file" accept="image/png,image/jpeg,image/webp" class="hidden"></label>
-      <p class="text-xs text-[var(--mute)] mt-2">Tip: capture the whole fixture list with the 1 / X / 2 odds visible, like the Instant Football lobby.</p>
+      <p class="text-xs text-[var(--mute)] mt-2">Tip: open the 1X2 tab and capture the fixture list with the 1 / X / 2 odds visible. Other markets (1X2-1UP, 1X2-2UP, O/U) are not supported.</p>
       ${P.error ? `<p class="text-sm font-semibold text-red-600 mt-3">${esc(P.error)}</p>` : ''}
       <button data-action="scan" class="btn btn-primary w-full mt-4" ${P.dataUrl ? '' : 'disabled'}>${ic('wand-sparkles')} Scan screenshot</button>
       ${P.dataUrl ? '<button data-action="clearimg" class="btn btn-ghost w-full mt-2 !py-3 text-sm">Remove screenshot</button>' : ''}</div>`;
-  } else if (P.step === 'pick') {
-    body = `<div class="wrap mt-6"><h2 class="font-display font-bold text-xl">${P.fixtures.length} fixtures found</h2>
-      <p class="text-sm text-[var(--mute)] mt-1">Your tier unlocks <b>${P.allowed}</b> match${P.allowed > 1 ? 'es' : ''}. Choose which to read. This cannot be changed afterwards.</p>
-      <div class="mt-4 space-y-2">${P.fixtures.map(f => { const on = P.picks.includes(f.i); return `<button data-action="togglepick" data-i="${f.i}" class="card p-3.5 w-full flex items-center gap-3 text-left ${on ? '!border-purple-500 !bg-purple-50' : ''}">
-        <span class="w-6 h-6 rounded-md border-2 flex items-center justify-center flex-none ${on ? 'grad border-transparent text-white' : 'border-slate-300'}">${on ? ic('check', '!w-4 !h-4') : ''}</span>
-        <span class="flex-1 font-display font-bold">${esc(f.home)} <span class="text-slate-400 font-medium">vs</span> ${esc(f.away)}</span>${f.league ? `<span class="text-xs text-[var(--mute)]">${esc(f.league)}</span>` : ''}</button>`; }).join('')}</div>
-      <button data-action="reveal" class="btn btn-primary w-full mt-4" ${P.picks.length ? '' : 'disabled'}>Show ${P.picks.length || ''} reading${P.picks.length === 1 ? '' : 's'} (${P.picks.length}/${P.allowed})</button></div>`;
   } else if (P.step === 'result') {
-    body = `<div class="wrap mt-6 space-y-3"><h2 class="font-display font-bold text-xl">Your readings</h2>
-      ${P.result.map(m => resultCard(m, P.resultKind === 'diamonds')).join('')}
-      <div class="rounded-2xl p-4 text-sm" style="background:#fffbeb;border:1.5px solid #fde68a;color:#78350f">${ic('triangle-alert', 'inline mr-1')} <b>Outcomes are random.</b> The shortest price loses often. These figures describe the odds, not the result. Only stake what you can afford to lose.</div>
+    const margins = P.result.map(m => (Odds.analyse(m) || {}).margin).filter(v => typeof v === 'number');
+    const avg = margins.length ? (margins.reduce((a, b) => a + b, 0) / margins.length).toFixed(1) : '-';
+    body = `<div class="wrap mt-6 space-y-3">
+      <div class="flex items-center justify-between gap-2"><h2 class="font-display font-bold text-xl">Your readings</h2><span class="chip text-xs">${esc(P.tier.name)} &middot; ${P.found} fixtures read</span></div>
+      ${P.result.map(m => matchCard(m, P.resultKind === 'diamonds')).join('')}
+      <div class="card p-4 flex items-center gap-3"><div class="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic('trending-up')}</div><div><div class="text-[11px] font-extrabold tracking-wider text-[var(--mute)]">AVG BOOKMAKER MARGIN</div><div class="font-display font-bold text-xl">${avg}%</div></div></div>
+      <div class="card p-4 flex items-center gap-3"><div class="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic('ticket')}</div><div class="flex-1"><div class="text-[11px] font-extrabold tracking-wider text-[var(--mute)]">READING REFERENCE</div><div class="font-display font-bold text-xl text-purple-800">${esc(P.reference)}</div></div><button data-action="copycode" class="chip font-bold">${ic('copy')} Copy</button></div>
+      <button data-action="copyslip" class="btn btn-green w-full">${ic('clipboard-copy')} Copy reading summary</button>
       <button data-action="newread" class="btn btn-ghost w-full">${ic('rotate-ccw')} New reading</button></div>`;
   }
   return header + body + '<div class="h-28"></div>';
@@ -1160,18 +1197,9 @@ document.addEventListener('click', async e => {
     case 'changetier': P.step = 'tiers'; render(); break;
     case 'clearimg': P.dataUrl = null; P.error = ''; render(); break;
     case 'scan': runScan(); break;
-    case 'togglepick': {
-      const i = Number(b.dataset.i);
-      if (P.picks.includes(i)) P.picks = P.picks.filter(x => x !== i);
-      else if (P.picks.length < P.allowed) P.picks.push(i);
-      else toast('Your tier unlocks ' + P.allowed + ' match' + (P.allowed > 1 ? 'es' : '') + '.');
-      render(); break;
-    }
-    case 'reveal': go(async () => {
-      const r = await callFn('scan-odds', { action: 'reveal', scan_id: P.scanId, picks: P.picks });
-      P.result = r.matches; P.resultKind = r.kind; P.step = 'result'; render();
-    }); break;
-    case 'newread': Object.assign(P, { step: 'tiers', dataUrl: null, error: '', scanId: null, fixtures: [], picks: [], result: null }); render(); break;
+    case 'copycode': copyToClipboard(P.reference).then(ok => toast(ok ? 'Reference copied.' : 'Could not copy. Select and copy it manually.')); break;
+    case 'copyslip': copyToClipboard(readingText()).then(ok => toast(ok ? 'Reading summary copied.' : 'Could not copy. Try again.')); break;
+    case 'newread': Object.assign(P, { step: 'tiers', dataUrl: null, error: '', scanId: null, result: null }); render(); break;
   }
 });
 
@@ -1187,7 +1215,7 @@ document.addEventListener('drop', e => { const d = e.target.closest('#drop'); if
 async function runScan() {
   const t = P.tier;
   P.step = 'scanning'; P.error = ''; await render();
-  const phases = ['Uploading screenshot', 'Reading fixture rows', 'Extracting odds', 'Preparing your fixtures'];
+  const phases = ['Uploading screenshot', 'Reading fixture rows', 'Checking the 1X2 market', 'Calculating implied probabilities'];
   let pct = 0;
   const timer = setInterval(() => {
     pct = Math.min(90, pct + Math.random() * 6 + 2);
@@ -1197,9 +1225,7 @@ async function runScan() {
   try {
     const r = await callFn('scan-odds', { action: 'scan', tier: t.id, image: P.dataUrl.split(',')[1] });
     clearInterval(timer);
-    P.scanId = r.scan_id; P.fixtures = r.fixtures; P.allowed = r.allowed; P.picks = []; P.step = 'pick';
-    // Auto-select when the tier covers every fixture found.
-    if (P.fixtures.length <= P.allowed) P.picks = P.fixtures.map(f => f.i);
+    Object.assign(P, { scanId: r.scan_id, result: r.matches, resultKind: r.kind, reference: r.reference, found: r.found, step: 'result' });
   } catch (err) {
     clearInterval(timer);
     P.error = msg(err); P.step = 'upload';
