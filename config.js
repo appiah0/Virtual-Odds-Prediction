@@ -8,5 +8,5 @@ window.CONFIG = {
   // Where Report Issue and Feedback messages are emailed. Create a free form at formspree.io
   // with your email, then paste its endpoint here, e.g. 'https://formspree.io/f/abcd1234'.
   // Leave empty and the buttons will open the user's email app instead.
-  FORM_ENDPOINT: 'https://formspree.io/f/mbdbgwjk'
+  FORM_ENDPOINT: 'https://formspree.io/f/mnppzrbb'
 };
