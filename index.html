@@ -6,6 +6,13 @@
 <meta name="theme-color" content="#7c3aed">
 <title>Virtual Odds Prediction - virtual football odds reader</title>
 <link rel="icon" type="image/png" href="icon-192.png">
+<link rel="canonical" href="https://virtual-odds-prediction.vercel.app/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Virtual Odds Prediction">
+<meta property="og:title" content="Virtual Odds Prediction">
+<meta property="og:description" content="Upload an Instant Football screenshot and see what the odds imply, including the bookmaker margin.">
+<meta property="og:url" content="https://virtual-odds-prediction.vercel.app/">
+<meta property="og:image" content="https://virtual-odds-prediction.vercel.app/logo.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
@@ -75,13 +82,15 @@ html,body{background:#fff;color:var(--ink);font-family:'Plus Jakarta Sans',sans-
    The Claude API key is NOT here. It lives in a Supabase Edge Function secret.
    ========================================================= */
 const CONFIG = window.CONFIG || {
-  SUPABASE_URL: 'https://hyxrwhgakduytptasihp.supabase.co',
-  SUPABASE_ANON_KEY: 'sb_publishable_lJKyhjDgsKNZATFaDDwgNg_6vwJ2V_n',
-  support: { email: 'support@yourdomain.com', whatsapp: '233533327517', telegram: 'VirtualOddsPrediction' },
+  SUPABASE_URL: 'https://YOUR-PROJECT.supabase.co',
+  SUPABASE_ANON_KEY: 'YOUR-ANON-KEY',
+  support: { email: 'support@yourdomain.com', whatsapp: '233XXXXXXXXX', telegram: 'YourTelegramHandle' },
   lobbyUrl: 'https://www.sportybet.com/gh/'
 };
 const CONFIGURED = !CONFIG.SUPABASE_URL.includes('YOUR-PROJECT');
 const BRAND = 'Virtual Odds Prediction';
+const SITE_URL = 'https://virtual-odds-prediction.vercel.app/'; // official link, used in email links
+const ACTIVATION_FEE = 1; // GHS, display only. paystack-init holds the real amount. Normal price: 50.
 localStorage.removeItem('iv_last_login');
 
 /* Display copy for tiers. The server (scan-odds function) holds the authoritative costs and match limits. */
@@ -98,7 +107,7 @@ const TIERS = {
   ]
 };
 const COIN_PACKS = [
-  { id: 'starter', name: 'Starter Coins Pack', price: 350,  desc: '1,000 coins. Enough for 1 Bronze reading.' },
+  { id: 'starter', name: 'Starter Coins Pack', price: 1,  desc: '1,000 coins. Enough for 1 Bronze reading.' },
   { id: 'pro',     name: 'Pro Coins Pack',     price: 700,  desc: '2,500 coins. Enough for 1 Silver Pro reading.', popular: true },
   { id: 'mega',    name: 'Mega Coins Pack',    price: 1200, desc: '5,000 coins. Enough for 1 Gold Ultra reading.' }
 ];
@@ -181,7 +190,7 @@ const Auth = {
     localStorage.setItem('iv_remember', '1');
     const { data, error } = await sb.auth.signUp({
       email, password: f.password,
-      options: { data: { first_name: f.first.trim(), other_name: f.other.trim(), last_name: f.last.trim(), phone }, emailRedirectTo: location.origin + location.pathname }
+      options: { data: { first_name: f.first.trim(), other_name: f.other.trim(), last_name: f.last.trim(), phone }, emailRedirectTo: SITE_URL }
     });
     if (error) {
       if (/database error/i.test(error.message)) throw 'That phone number is already registered.';
@@ -203,7 +212,7 @@ const Auth = {
     }
   },
   async reset(email) {
-    const { error } = await sb.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: location.origin + location.pathname });
+    const { error } = await sb.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: SITE_URL });
     if (error) throw error.message;
   },
   async logout() { await sb.auth.signOut(); state.me = null; location.hash = '#/'; render(); }
@@ -241,7 +250,7 @@ async function shrinkImage(file) {
 const V = {};
 const FAQ = [
   ['Can it predict who will win?', 'No. Virtual football results come from a random number generator, so nobody can predict them reliably. This tool reads the odds on your screenshot and shows what they imply, including the bookmaker margin.'],
-  ['How do I get started?', 'Create an account and pay the one-time GH\u20B5 50 activation fee, buy a package, then upload a screenshot of the Instant Football lobby on the Predictions page and pick the fixtures to read.'],
+  ['How do I get started?', `Create an account and pay the one-time ${money(ACTIVATION_FEE)} activation fee, buy a package, then upload a screenshot of the Instant Football lobby on the Predictions page and pick the fixtures to read.`],
   ['What happens to my screenshot?', 'It is sent securely to our server, read by the Claude API, and the extracted fixtures and odds are stored with your account. The image itself is not kept.'],
   ['Does paying more improve my chances?', 'No. Coins and diamonds only pay for readings. They do not change the odds or the outcome of any game.']
 ];
@@ -432,7 +441,7 @@ V.landing = () => `
     ${lobbyBanner()}
     <div class="dark-card p-6 mt-4 text-center">
       <h3 class="font-display font-bold text-2xl">Ready to read the odds?</h3>
-      <p class="text-slate-300 text-[15px] mt-2">Create an account to get started. A one-time GH\u20B5 50 activation fee applies.</p>
+      <p class="text-slate-300 text-[15px] mt-2">Create an account to get started. A one-time ${money(ACTIVATION_FEE)} activation fee applies.</p>
       <a href="#/register" class="btn btn-primary w-full mt-5">GET STARTED ${ic('arrow-right')}</a>
       <p class="text-sm text-slate-400 mt-4">Already have an account? <a href="#/login" class="text-purple-300 font-bold underline">Log In</a></p>
     </div>
@@ -451,7 +460,7 @@ V.register = () => `${head('#/')}
       ${phoneField('Phone number', 'phone', '24 123 4567')}
       ${pwField('Password (min 6 characters)', 'password', 'new-password')}
       ${pwField('Confirm password', 'confirm', 'new-password')}
-      <div class="rounded-2xl p-3 text-sm flex gap-2" style="background:#faf5ff;border:1.5px solid #e9d5ff;color:#5b21b6"><span class="flex-none">${ic('info')}</span><span>A one-time <b>GH\u20B5 50.00</b> activation fee is required after sign-up before you can use the app. Pay with MTN MoMo or Telecel Cash.</span></div>
+      <div class="rounded-2xl p-3 text-sm flex gap-2" style="background:#faf5ff;border:1.5px solid #e9d5ff;color:#5b21b6"><span class="flex-none">${ic('info')}</span><span>A one-time <b>${money(ACTIVATION_FEE)}</b> activation fee is required after sign-up before you can use the app. Pay with MTN MoMo or Telecel Cash.</span></div>
       <label class="flex gap-3 items-start text-sm"><input type="checkbox" name="terms" class="mt-1 w-4 h-4 accent-purple-600"> <span>I agree to the Terms &amp; Conditions and confirm I am 18 or older.</span></label>
       <p id="formErr" class="text-sm font-semibold text-red-600 hidden"></p>
       <button class="btn btn-primary w-full" type="submit">Create Account</button>
@@ -920,7 +929,6 @@ V.profile = u => {
 /* =========================================================
    Popups, account activation and Paystack checkout
    ========================================================= */
-const ACTIVATION_FEE = 50; // display only. The server (paystack-init) is the authority on the amount.
 
 function popup({ icon = 'circle-check', tone = 'green', title, text, button = 'Continue' }) {
   return new Promise(resolve => {
