@@ -64,6 +64,9 @@ html,body{background:#fff;color:var(--ink);font-family:'Plus Jakarta Sans',sans-
 .toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-120px);background:#0f1226;color:#fff;padding:12px 18px;border-radius:14px;font-size:14px;font-weight:600;z-index:100;transition:transform .3s;max-width:90vw}
 .toast.show{transform:translateX(-50%) translateY(0)}
 .status-pending{background:#fef3c7;color:#92400e}.status-successful{background:#d1fae5;color:#065f46}.status-failed{background:#fee2e2;color:#991b1b}.status-canceled{background:#e5e7eb;color:#374151}
+.dots{display:flex;gap:6px;justify-content:center;margin-top:14px}.dots span{width:8px;height:8px;border-radius:50%;background:#10b981;opacity:.25;animation:dot 1.2s infinite}.dots span:nth-child(2){animation-delay:.2s}.dots span:nth-child(3){animation-delay:.4s}.dots span:nth-child(4){animation-delay:.6s;background:#22d3ee}
+@keyframes dot{0%,100%{opacity:.25;transform:scale(1)}50%{opacity:1;transform:scale(1.35)}}
+.ring{width:84px;height:84px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle,#e0f2fe,#bae6fd);box-shadow:0 0 0 6px rgba(56,189,248,.18),0 0 24px rgba(56,189,248,.45)}
 .scanline{position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,transparent,#22d3ee,transparent);box-shadow:0 0 14px 4px rgba(34,211,238,.55);animation:scan 2.2s ease-in-out infinite}
 @keyframes scan{0%{top:0}50%{top:calc(100% - 3px)}100%{top:0}}
 .modal-bg{position:fixed;inset:0;background:rgba(15,18,38,.55);backdrop-filter:blur(3px);z-index:90;display:flex;align-items:center;justify-content:center;padding:24px}
@@ -81,12 +84,12 @@ html,body{background:#fff;color:var(--ink);font-family:'Plus Jakarta Sans',sans-
 <script>
 /* =========================================================
    CONFIG - fill in the Supabase values (the anon key is public by design).
-   The Claude API key is NOT here. It lives in a Supabase Edge Function secret.
+   The AI vision key is NOT here. It lives in a Supabase Edge Function secret.
    ========================================================= */
 const CONFIG = window.CONFIG || {
-  SUPABASE_URL: 'https://hyxrwhgakduytptasihp.supabase.co',
-  SUPABASE_ANON_KEY: 'sb_publishable_lJKyhjDgsKNZATFaDDwgNg_6vwJ2V_n',
-  support: { email: 'support@VirtualOddsPrediction.com', whatsapp: '233533327517', telegram: 'VirtualOddsPrediction' },
+  SUPABASE_URL: 'https://YOUR-PROJECT.supabase.co',
+  SUPABASE_ANON_KEY: 'YOUR-ANON-KEY',
+  support: { email: 'support@yourdomain.com', whatsapp: '233XXXXXXXXX', telegram: 'YourTelegramHandle' },
   lobbyUrl: 'https://www.sportybet.com/gh/'
 };
 const CONFIGURED = !CONFIG.SUPABASE_URL.includes('YOUR-PROJECT');
@@ -109,14 +112,14 @@ const TIERS = {
   ]
 };
 const COIN_PACKS = [
-  { id: 'starter', name: 'Starter Coins Pack', price: 1,  desc: '1,000 coins. Enough for 1 Bronze reading.' },
-  { id: 'pro',     name: 'Pro Coins Pack',     price: 700,  desc: '2,500 coins. Enough for 1 Silver Pro reading.', popular: true },
-  { id: 'mega',    name: 'Mega Coins Pack',    price: 1200, desc: '5,000 coins. Enough for 1 Gold Ultra reading.' }
+  { id: 'starter', name: 'Starter Coins Pack', price: 1,    desc: '1,000 coins. Enough for 1 Bronze reading.' }, // price 1 is the live test price. Normal: 350
+  { id: 'pro',     name: 'Pro Coins Pack',     price: 700,  desc: '4,500 coins to spend on any coins tier.', popular: true },
+  { id: 'mega',    name: 'Mega Coins Pack',    price: 1200, desc: '8,300 coins to spend on any coins tier.' }
 ];
 const DIAMOND_PACKS = [
-  { id: 'd20', name: 'Silver Diamonds Pack', price: 500,  desc: '20 diamonds. Enough for 1 Silver VIP reading.' },
-  { id: 'd40', name: 'Gold Diamonds Pack',   price: 1000, desc: '40 diamonds. Enough for 1 Gold VIP reading.', popular: true },
-  { id: 'd80', name: 'Master Diamonds Pack', price: 2000, desc: '80 diamonds. Enough for 1 Master VIP reading.' }
+  { id: 'd20', name: 'Silver Diamonds Pack', price: 1400, desc: '100 diamonds to spend on any VIP tier.' },
+  { id: 'd40', name: 'Gold Diamonds Pack',   price: 2000, desc: '500 diamonds to spend on any VIP tier.', popular: true },
+  { id: 'd80', name: 'Master Diamonds Pack', price: 2800, desc: '800 diamonds to spend on any VIP tier.' }
 ];
 
 /* =========================================================
@@ -253,7 +256,7 @@ const V = {};
 const FAQ = [
   ['Can it predict who will win?', 'No. Virtual football results come from a random number generator, so nobody can predict them reliably. This tool reads the odds on your screenshot and shows what they imply, including the bookmaker margin.'],
   ['How do I get started?', `Create an account and pay the one-time ${money(ACTIVATION_FEE)} activation fee, buy a package, then upload a screenshot of the Instant Football lobby on the Predictions page and pick the fixtures to read.`],
-  ['What happens to my screenshot?', 'It is sent securely to our server, read by the Claude API, and the extracted fixtures and odds are stored with your account. The image itself is not kept.'],
+  ['What happens to my screenshot?', 'It is sent securely to our server, read by our AI vision engine, and the extracted fixtures and odds are stored with your account. The image itself is not kept.'],
   ['Does paying more improve my chances?', 'No. Coins and diamonds only pay for readings. They do not change the odds or the outcome of any game.']
 ];
 function head(back) {
@@ -310,7 +313,7 @@ function aboutBlock() {
       <div><div class="font-display font-bold text-2xl text-amber-300">Random</div><div class="text-xs text-slate-400 mt-1">Outcomes, always</div></div>
     </div>
     <div class="mt-4 space-y-3">
-      ${[['brain', '#f5f3ff', '#7c3aed', 'Vision-based odds reader', 'Claude reads the fixture rows and odds from your screenshot. The probability and margin maths is done in your browser, not guessed by the model.'],
+      ${[['brain', '#f5f3ff', '#7c3aed', 'Vision-based odds reader', 'Our AI vision engine reads the fixture rows and odds from your screenshot. The probability and margin maths is done in your browser, not guessed by the model.'],
          ['shield-check', '#ecfdf5', '#059669', 'Honest by design', 'No win-rate claims and no invented reviews. We tell you plainly that results are random and that losses are part of the game.'],
          ['headset', '#eff6ff', '#0284c7', 'Support', 'Questions about a deposit or a reading? Reach us on WhatsApp, Telegram or email.']]
         .map(([i, bg, col, t, d]) => `<div class="card p-4 flex gap-4"><div class="w-12 h-12 rounded-2xl flex-none flex items-center justify-center" style="background:${bg};color:${col}">${ic(i, 'i-lg')}</div><div><div class="font-display font-bold">${t}</div><p class="text-sm text-[var(--mute)] mt-1">${d}</p></div></div>`).join('')}
@@ -662,7 +665,7 @@ V.deposit = u => {
     </div>
     ${recent.length ? `<div class="card p-5 mt-4"><div class="font-display font-bold mb-2">Recent payments</div>
       ${recent.map(t => `<div class="py-2.5 flex items-center justify-between gap-3 border-b border-[var(--line)] last:border-0"><div class="min-w-0"><div class="text-sm font-semibold truncate">${esc(t.label)}</div><div class="text-xs text-[var(--mute)]">${esc(t.reference)} &middot; ${fmtDate(t.created_at)}</div></div><span class="status-${t.status} text-[11px] font-bold px-2 py-0.5 rounded-full capitalize">${t.status}</span></div>`).join('')}
-      <button data-action="refresh" class="btn btn-ghost w-full mt-3 !py-2.5 text-sm">${ic('refresh-cw')} Refresh</button></div>` : ''}
+      <button data-action="refresh" class="btn btn-ghost w-full mt-3 !py-2.5 text-sm">${ic('refresh-cw')} Check payment status</button></div>` : ''}
   </main>${nav('')}`;
 };
 
@@ -687,17 +690,21 @@ function matchCard(m, detailed) {
   const chip = a.ou
     ? (a.ou.over >= a.ou.under ? `Over ${a.ou.line} &middot; ${a.ou.over.toFixed(0)}%` : `Under ${a.ou.line} &middot; ${a.ou.under.toFixed(0)}%`)
     : `Margin ${a.margin.toFixed(1)}%`;
-  const team = t => `<div class="rounded-2xl px-3 py-3 font-display font-bold text-xl bg-slate-50 text-center min-w-[78px]" style="border:1.5px solid #eef0f6">${esc(t)}</div>`;
+  const team = (t, full) => `<div class="text-center min-w-[84px] max-w-[110px]"><div class="rounded-2xl px-3 py-3 font-display font-bold text-xl bg-slate-50" style="border:1.5px solid #eef0f6">${esc(t)}</div>${full ? `<div class="text-[11px] text-slate-500 mt-1 leading-tight">${esc(full)}</div>` : ''}</div>`;
+  const leagueName = m.league ? (/league|cup|champions|euro/i.test(m.league) ? m.league : m.league + ' Virtual League') : 'Virtual football';
+  const gap = [...a.p].sort((x, y) => y - x);
+  const shape = gap[0] >= 50 ? 'Clear favourite' : (gap[0] - gap[1] < 5 ? 'Balanced match' : 'Slight favourite');
+  const fair = a.p.map(v => (100 / v).toFixed(2)).join(' / ');
   return `<div class="rounded-[22px] p-4 bg-white" style="border:1.5px solid #e6e8f2;border-left:4px solid #6d28d9;box-shadow:0 12px 26px -20px rgba(15,18,38,.45)">
     <div class="flex items-center gap-2">
-      <div class="flex items-center gap-1.5 text-sm font-bold text-slate-700 flex-1 min-w-0"><span class="text-purple-700 flex-none">${ic('trophy', '!w-4 !h-4')}</span><span class="truncate">${esc(m.league || 'Virtual football')}</span></div>
+      <div class="flex items-center gap-1.5 text-sm font-bold text-slate-700 flex-1 min-w-0"><span class="text-purple-700 flex-none">${ic('trophy', '!w-4 !h-4')}</span><span class="truncate">${esc(leagueName)}</span></div>
       <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg whitespace-nowrap" style="background:#ede9fe;color:#5b21b6">Match ${m.match_no}</span>
       <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 whitespace-nowrap" style="background:#dcfce7;color:#166534">${ic('chart-pie', '!w-3.5 !h-3.5')} ${a.p[idx].toFixed(0)}% implied</span>
     </div>
     <div class="flex items-center justify-between mt-4">
-      ${team(m.home)}
+      ${team(m.home, m.home_full)}
       <div class="text-center"><div class="w-9 h-9 rounded-full bg-slate-900 text-white text-xs font-bold flex items-center justify-center mx-auto">VS</div><div class="text-[10px] font-extrabold tracking-wider text-purple-700 mt-1">1X2</div></div>
-      ${team(m.away)}
+      ${team(m.away, m.away_full)}
     </div>
     <div class="grid grid-cols-3 gap-2.5 mt-4">${[0, 1, 2].map(i => `<div class="rounded-2xl py-3 text-center" style="${i === idx ? 'background:#f5f3ff;border:1.5px solid #7c3aed' : 'background:#fff;border:1.5px solid #eef0f6'}">
       <div class="flex items-center justify-center gap-1 text-xs font-bold text-slate-500">${hd[i]}${i === idx ? '<span class="text-[9px] font-extrabold text-white px-1.5 py-0.5 rounded" style="background:#6d28d9">SHORTEST</span>' : ''}</div>
@@ -709,7 +716,8 @@ function matchCard(m, detailed) {
       <div class="flex-1 min-w-0"><div class="text-[10px] font-extrabold tracking-wider text-purple-200">SHORTEST PRICE</div><div class="font-display font-extrabold text-lg leading-tight">${names[idx]}</div></div>
       <span class="text-xs font-bold rounded-lg px-2.5 py-1.5 bg-white/15 whitespace-nowrap">${chip}</span>
     </div>
-    ${detailed ? `<div class="mt-3 text-sm text-[var(--mute)] flex flex-wrap gap-x-4 gap-y-1"><span>Bookmaker margin <b class="text-slate-800">${a.margin.toFixed(1)}%</b></span>${a.ou ? `<span>Over ${a.ou.line}: <b class="text-slate-800">${a.ou.over.toFixed(1)}%</b></span><span>Under ${a.ou.line}: <b class="text-slate-800">${a.ou.under.toFixed(1)}%</b></span>` : ''}</div>` : ''}
+    <div class="mt-3 text-[13px] text-[var(--mute)] flex flex-wrap gap-x-4 gap-y-1"><span>${shape}</span><span>Fair odds <b class="text-slate-800">${fair}</b></span></div>
+    ${detailed ? `<div class="mt-2 text-sm text-[var(--mute)] flex flex-wrap gap-x-4 gap-y-1"><span>Bookmaker margin <b class="text-slate-800">${a.margin.toFixed(1)}%</b></span>${a.ou ? `<span>Over ${a.ou.line}: <b class="text-slate-800">${a.ou.over.toFixed(1)}%</b></span><span>Under ${a.ou.line}: <b class="text-slate-800">${a.ou.under.toFixed(1)}%</b></span>` : ''}</div>` : ''}
   </div>`;
 }
 function readingText() {
@@ -762,12 +770,23 @@ V.predict = u => {
         <div class="flex justify-between items-center"><div class="font-display font-bold flex items-center gap-2" style="color:#92400e">${ic('triangle-alert')} Financial Advisory &amp; Risk Disclaimer</div><span class="chip !bg-red-50 !text-red-700 !border-red-200 text-[11px]">18+ RATED</span></div>
         <p class="text-sm mt-2" style="color:#78350f">Readings explain what the odds on your screenshot imply. They are not predictions and not guarantees. Virtual sports outcomes are random and carry real financial risk. Never stake money you cannot afford to lose.</p></div></div>`;
   } else if (P.step === 'scanning') {
-    body = `<div class="wrap mt-6"><div class="card p-4 text-center">
-      <div class="relative rounded-2xl overflow-hidden bg-slate-900"><img src="${P.dataUrl}" alt="" class="mx-auto block opacity-90" style="max-height:260px"><div class="scanline"></div></div>
-      <div class="mt-4 rounded-2xl py-3 text-white font-display font-bold tracking-wide flex items-center justify-center gap-2" style="background:linear-gradient(135deg,#a855f7,#6d28d9)"><span class="spin flex">${ic('loader')}</span> SCANNING SCREENSHOT...</div>
-      <div class="font-display font-bold mt-4">Claude vision reader active</div>
-      <p id="scanStatus" class="text-sm text-[var(--mute)] mt-1">Uploading screenshot</p>
-      <div class="bar mt-4"><span id="scanBar" class="grad" style="width:0%"></span></div><div id="scanPct" class="text-sm font-bold mt-2">0%</div></div></div>`;
+    body = `<div class="wrap mt-6">
+      <div class="rounded-[24px] p-3" style="border:2px dashed #c4b5fd;background:#faf5ff">
+        <div class="relative rounded-2xl overflow-hidden bg-slate-900"><img src="${P.dataUrl}" alt="" class="mx-auto block opacity-90" style="max-height:260px"><div class="scanline"></div></div>
+      </div>
+      <div class="mt-4 rounded-2xl py-4 text-white font-display font-extrabold tracking-wide flex items-center justify-center gap-2.5" style="background:linear-gradient(135deg,#a855f7,#6d28d9);box-shadow:0 14px 28px -12px rgba(124,58,237,.7)"><span class="spin flex">${ic('loader')}</span> SCANNING SCREENSHOT...</div>
+      <div class="mt-4 rounded-[24px] p-5 text-center bg-white" style="border:1.5px solid #7dd3fc;box-shadow:0 14px 30px -20px rgba(14,165,233,.5)">
+        <div id="scanIcon"><div class="ring text-sky-700">${ic('brain', '!w-8 !h-8')}</div></div>
+        <div id="scanTitle" class="font-display font-bold text-lg mt-4">Scanning screenshot...</div>
+        <span id="scanPill" class="inline-block text-xs font-bold rounded-lg px-3 py-1.5 mt-2" style="background:#dcfce7;color:#15803d">Neural Vision Engine Active</span>
+        <div class="bar mt-5" style="height:8px"><span id="scanBar" style="width:0%;background:linear-gradient(90deg,#2563eb,#4f46e5,#10b981)"></span></div>
+        <div class="flex items-center justify-between text-xs font-bold text-slate-500 mt-2"><span id="scanPct">0%</span><span id="scanStatus" class="flex items-center gap-1.5">Uploading screenshot...</span></div>
+        <div class="dots"><span></span><span></span><span></span><span></span></div>
+      </div>
+      <div class="mt-4 rounded-2xl p-4 flex items-center gap-3" style="background:#fffbeb;border:1.5px solid #fde68a;border-left:5px solid #f59e0b">
+        <span class="text-amber-600 flex-none">${ic('triangle-alert')}</span><div class="flex-1 font-display font-bold text-[15px]" style="color:#92400e">Financial Advisory &amp; Risk Disclaimer</div>
+        <span class="chip !bg-red-50 !text-red-700 !border-red-200 text-[11px]">18+ RATED</span>
+      </div></div>`;
   } else if (P.step === 'upload') {
     const t = P.tier;
     body = `<div class="wrap mt-6">
@@ -846,7 +865,7 @@ V.about = u => {
     <div class="mt-4 space-y-3">
       ${side('#7c3aed', '#f5f3ff', 'target', 'Our Mission', 'To explain virtual football odds clearly: what each price implies, how big the bookmaker margin is, and why results are still random.')}
       ${side('#10b981', '#ecfdf5', 'compass', 'Our Vision', 'Players who understand the odds before they stake, and who treat virtual football as entertainment with firm limits.')}
-      ${side('#0ea5e9', '#f0f9ff', 'cpu', 'How the Reader Works', 'Claude vision reads the teams and the 1X2 and over/under odds from your screenshot. The probability and margin maths is then calculated in your browser.')}
+      ${side('#0ea5e9', '#f0f9ff', 'cpu', 'How the Reader Works', 'Our AI vision engine reads the teams and the 1X2 and over/under odds from your screenshot. The probability and margin maths is then calculated in your browser.')}
       ${side('#f59e0b', '#fffbeb', 'shield-check', 'Security & Responsible Gaming', 'Accounts use Supabase authentication over HTTPS, and payments are processed by Paystack, so we never see your MoMo PIN. 18+ only. Play responsibly.')}
     </div>
     <h2 class="font-display font-bold text-xl mt-7 flex items-center gap-2"><span class="text-purple-600">${ic('workflow', 'i-lg')}</span> How Our Odds Reader Works</h2>
@@ -1007,7 +1026,7 @@ V.activate = u => `<div style="min-height:100vh;background:linear-gradient(180de
 
 /* Returns 'successful' | 'failed' | 'canceled' | 'pending'. Callers decide what to show. */
 async function confirmPayment(ref) {
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 24; i++) { // MoMo approvals can take a minute
     const r = await callFn('paystack-verify', { reference: ref });
     if (r.status === 'successful') return 'successful';
     if (r.status === 'failed') return 'failed';
@@ -1032,6 +1051,18 @@ async function pay(payload) {
   }
   toast('Confirming your payment...');
   return confirmPayment(init.reference);
+}
+/* Self-healing: asks the server to re-check recent unpaid-looking payments with Paystack and credit any that
+   actually succeeded (covers slow MoMo approvals and a missed webhook). Safe to run repeatedly. */
+let reconAt = 0;
+async function reconcilePayments(force) {
+  if (!force && Date.now() - reconAt < 45000) return 0;
+  reconAt = Date.now();
+  try {
+    const r = await callFn('paystack-verify', { reconcile: true });
+    if (r.credited > 0) { toast('Payment confirmed. Your account has been updated.'); await render(true); }
+    return r.credited || 0;
+  } catch { return 0; }
 }
 async function settle(status, okMsg) {
   if (status === 'successful') toast(okMsg);
@@ -1081,6 +1112,8 @@ async function render(keep) {
   $('#app').innerHTML = html + (showNav ? nav(name) : '') + (name === 'predict' && me ? nav('predict') : '');
   lucide.createIcons();
   if (!keep) window.scrollTo(0, 0);
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  if (me && me.tx.some(t => t.reference && ['pending', 'canceled', 'failed'].includes(t.status) && new Date(t.created_at).getTime() > weekAgo)) reconcilePayments();
 }
 window.addEventListener('hashchange', () => render());
 sb.auth.onAuthStateChange(ev => {
@@ -1167,7 +1200,7 @@ document.addEventListener('click', async e => {
         location.hash = '#/dashboard'; await render();
       } else await settle(st, '');
     }).finally(() => { b.disabled = false; }); break;
-    case 'refresh': render(); break;
+    case 'refresh': reconcilePayments(true).then(n => { if (!n) toast('No new confirmed payments yet. Try again in a minute.'); }); break;
     case 'filter': state.txFilter = v; render(); break;
     case 'star': state.fbDraft = ($('#fbText') || {}).value || ''; state.fbRating = Number(v); render(true); break;
     case 'sendfeedback': go(async () => {
@@ -1215,12 +1248,23 @@ document.addEventListener('drop', e => { const d = e.target.closest('#drop'); if
 async function runScan() {
   const t = P.tier;
   P.step = 'scanning'; P.error = ''; await render();
-  const phases = ['Uploading screenshot', 'Reading fixture rows', 'Checking the 1X2 market', 'Calculating implied probabilities'];
-  let pct = 0;
+  const stageA = ['Uploading screenshot...', 'Reading fixture rows...', 'Checking the 1X2 market...'];
+  const stageB = ['Extracting odds...', 'Calculating implied probabilities...', 'Preparing your readings...'];
+  let pct = 0, stage = 'A';
   const timer = setInterval(() => {
     pct = Math.min(90, pct + Math.random() * 6 + 2);
-    const bar = $('#scanBar'), p = $('#scanPct'), s = $('#scanStatus');
-    if (bar) bar.style.width = pct + '%'; if (p) p.textContent = Math.round(pct) + '%'; if (s) s.textContent = phases[Math.min(3, Math.floor(pct / 25))];
+    const bar = $('#scanBar'), p = $('#scanPct'), st = $('#scanStatus');
+    if (bar) bar.style.width = pct + '%'; if (p) p.textContent = Math.round(pct) + '%';
+    const next = pct < 50 ? 'A' : 'B';
+    if (next !== stage) {
+      stage = next;
+      const icon = $('#scanIcon'), title = $('#scanTitle'), pill = $('#scanPill');
+      if (icon) icon.innerHTML = `<div class="w-[84px] h-[84px] rounded-[22px] mx-auto flex items-center justify-center shadow-lg" style="background:linear-gradient(135deg,#1e1b4b,#312e81);color:#facc15">${ic('zap', '!w-9 !h-9')}</div>`;
+      if (title) title.textContent = 'Connecting to the odds engine...';
+      if (pill) pill.textContent = 'Preparing your readings';
+      lucide.createIcons();
+    }
+    if (st) { const list = stage === 'A' ? stageA : stageB; st.textContent = list[Math.min(2, Math.floor((stage === 'A' ? pct : pct - 50) / (stage === 'A' ? 17 : 14)))] || list[2]; }
   }, 350);
   try {
     const r = await callFn('scan-odds', { action: 'scan', tier: t.id, image: P.dataUrl.split(',')[1] });
