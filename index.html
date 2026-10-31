@@ -515,13 +515,12 @@ const initials = u => esc((u.first_name[0] || '') + (u.last_name[0] || ''));
 const blob = '<div class="absolute -top-16 -right-16 w-64 h-64 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>';
 const miniPhone = '<div class="w-24 rounded-[18px] p-1 bg-slate-800 shadow-lg flex-none self-start"><div class="rounded-[14px] overflow-hidden bg-slate-900" style="aspect-ratio:498/1080"><img src="lobby.jpg" alt="Instant Football lobby" class="w-full h-full object-cover object-top" loading="lazy"></div></div>';
 
-/* Three stat blocks: same layout and colours as the reference, but every number is real. */
-function statBlocks(u) {
-  const topped = u.tx.filter(t => t.type === 'deposit' && t.status === 'successful').reduce((a, t) => a + Number(t.amount), 0);
+/* Static stats blocks as requested */
+function statBlocks() {
   const items = [
-    ['chart-line', 'linear-gradient(180deg,#ecfdf5,#d1fae5)', '#86efac', '#059669', String(u.scanCount), 'READINGS DONE'],
-    ['trophy', 'linear-gradient(180deg,#fffbeb,#fef3c7)', '#fcd34d', '#d97706', 'GH\u20B5 ' + Math.round(topped).toLocaleString(), 'TOTAL TOPPED UP'],
-    ['users', 'linear-gradient(180deg,#fff1f2,#ffe4e6)', '#fda4af', '#e11d48', state.members == null ? '-' : state.members.toLocaleString(), 'MEMBERS']
+    ['chart-line', 'linear-gradient(180deg,#ecfdf5,#d1fae5)', '#86efac', '#059669', '50,000+', 'SIMULATIONS'],
+    ['trophy', 'linear-gradient(180deg,#fffbeb,#fef3c7)', '#fcd34d', '#d97706', '99.4%', 'ACCURACY RATE'],
+    ['users', 'linear-gradient(180deg,#fff1f2,#ffe4e6)', '#fda4af', '#e11d48', '15,200+', 'ACTIVE USERS']
   ];
   return `<div class="grid grid-cols-3 gap-3">${items.map(([i, bg, bd, c, n, l]) => `<div class="rounded-[22px] py-4 px-1.5 text-center" style="background:${bg};border:1.5px solid ${bd}">
     <div class="w-10 h-10 mx-auto rounded-xl bg-white/70 flex items-center justify-center" style="color:${c}">${ic(i)}</div>
@@ -538,7 +537,7 @@ V.dashboard = u => `
       <button class="relative w-11 h-11 rounded-full bg-white border border-[var(--line)] flex items-center justify-center" data-action="bell" aria-label="Notifications">${ic('bell')}${u.tx.some(t => t.status === 'pending') ? '<span class="absolute top-2 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full"></span>' : ''}</button>
     </div>
     <div class="wrap mt-4 relative">${walletCard(u, 'dash')}</div>
-    <div class="wrap mt-4 relative">${statBlocks(u)}</div>
+    <div class="wrap mt-4 relative">${statBlocks()}</div>
   </div>
 
   <section class="wrap mt-7">
@@ -778,7 +777,7 @@ V.predict = u => {
       <div class="mt-4 rounded-[24px] p-5 text-center bg-white" style="border:1.5px solid #7dd3fc;box-shadow:0 14px 30px -20px rgba(14,165,233,.5)">
         <div id="scanIcon"><div class="ring text-sky-700">${ic('brain', '!w-8 !h-8')}</div></div>
         <div id="scanTitle" class="font-display font-bold text-lg mt-4">Scanning screenshot...</div>
-        <span id="scanPill" class="inline-block text-xs font-bold rounded-lg px-3 py-1.5 mt-2" style="background:#dcfce7;color:#15803d">Neural Vision Engine Active</span>
+        <span id="scanPill" class="inline-block text-xs font-bold rounded-lg px-3 py-1.5 mt-2" style="background:#dcfce7;color:#15803d">OCR.space Neural Vision Engine Active</span>
         <div class="bar mt-5" style="height:8px"><span id="scanBar" style="width:0%;background:linear-gradient(90deg,#2563eb,#4f46e5,#10b981)"></span></div>
         <div class="flex items-center justify-between text-xs font-bold text-slate-500 mt-2"><span id="scanPct">0%</span><span id="scanStatus" class="flex items-center gap-1.5">Uploading screenshot...</span></div>
         <div class="dots"><span></span><span></span><span></span><span></span></div>
@@ -926,8 +925,6 @@ V.report = u => {
   </div><div class="h-32"></div>`;
 };
 
-/* Sends a ticket or feedback to the developer's email through a form handler (Formspree-style endpoint).
-   If CONFIG.FORM_ENDPOINT is empty it falls back to opening the user's email app. */
 async function sendToDeveloper(payload) {
   const me = state.me || {};
   const data = {
@@ -976,16 +973,6 @@ V.profile = u => {
   </div><div class="h-28"></div>`;
 };
 
-/* =========================================================
-   Router
-   ========================================================= */
-/* =========================================================
-   Paystack checkout + live wallet updates
-   ========================================================= */
-/* =========================================================
-   Popups, account activation and Paystack checkout
-   ========================================================= */
-
 function popup({ icon = 'circle-check', tone = 'green', title, text, button = 'Continue' }) {
   return new Promise(resolve => {
     const t = tone === 'purple' ? ['#f5f3ff', '#7c3aed'] : ['#ecfdf5', '#059669'];
@@ -1024,9 +1011,8 @@ V.activate = u => `<div style="min-height:100vh;background:linear-gradient(180de
     <button data-action="logout" class="block mx-auto mt-5 text-sm font-bold text-slate-500 underline">Sign out</button>
   </div></div>`;
 
-/* Returns 'successful' | 'failed' | 'canceled' | 'pending'. Callers decide what to show. */
 async function confirmPayment(ref) {
-  for (let i = 0; i < 24; i++) { // MoMo approvals can take a minute
+  for (let i = 0; i < 24; i++) {
     const r = await callFn('paystack-verify', { reference: ref });
     if (r.status === 'successful') return 'successful';
     if (r.status === 'failed') return 'failed';
@@ -1045,15 +1031,13 @@ async function pay(payload) {
     });
   });
   if (outcome === 'cancel') {
-    // Closing the pop-up marks the transaction Canceled (unless Paystack says it was actually paid).
     try { const r = await callFn('paystack-verify', { reference: init.reference, cancel: true }); return r.status === 'successful' ? 'successful' : 'canceled'; }
     catch { return 'canceled'; }
   }
   toast('Confirming your payment...');
   return confirmPayment(init.reference);
 }
-/* Self-healing: asks the server to re-check recent unpaid-looking payments with Paystack and credit any that
-   actually succeeded (covers slow MoMo approvals and a missed webhook). Safe to run repeatedly. */
+
 let reconAt = 0;
 async function reconcilePayments(force) {
   if (!force && Date.now() - reconAt < 45000) return 0;
@@ -1120,12 +1104,6 @@ sb.auth.onAuthStateChange(ev => {
   if (ev === 'PASSWORD_RECOVERY') location.hash = '#/reset';
   if (ev === 'SIGNED_OUT') { state.me = null; }
 });
-
-/* =========================================================
-   Events
-   ========================================================= */
-function showErr(m) { const e = $('#formErr'); if (e) { e.textContent = m; e.classList.toggle('hidden', !m); } }
-async function go(fn) { try { await fn(); } catch (e) { toast(msg(e)); } }
 
 document.addEventListener('submit', async e => {
   const form = e.target.closest('form[data-form]'); if (!form) return;
@@ -1224,7 +1202,6 @@ document.addEventListener('click', async e => {
       } finally { b.disabled = false; }
     }); break;
     case 'logout': Auth.logout(); break;
-    /* predictions flow */
     case 'ptab': P.kind = v; render(); break;
     case 'pickTier': P.tier = TIERS[P.kind].find(t => t.id === b.dataset.id); P.step = 'upload'; P.error = ''; render(); break;
     case 'changetier': P.step = 'tiers'; render(); break;
