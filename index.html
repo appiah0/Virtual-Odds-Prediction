@@ -169,14 +169,12 @@ const P = { step: 'tiers', kind: 'coins', tier: null, dataUrl: null, error: '', 
 async function loadMe() {
   const s = await session();
   if (!s) { state.me = null; return null; }
-  const [p, t, sc, mc] = await Promise.all([
+  const [p, t, sc] = await Promise.all([
     sb.from('profiles').select('*').eq('id', s.user.id).maybeSingle(),
     sb.from('transactions').select('*').order('created_at', { ascending: false }).limit(100),
-    sb.from('scans').select('id,tier,allowed,created_at', { count: 'exact' }).order('created_at', { ascending: false }).limit(5),
-    sb.rpc('member_count')
+    sb.from('scans').select('id,tier,allowed,created_at', { count: 'exact' }).order('created_at', { ascending: false }).limit(5)
   ]);
   if (!p.data) { state.me = null; return null; }
-  state.members = mc.data == null ? null : Number(mc.data);
   state.me = { email: s.user.email, ...p.data, cash: Number(p.data.cash), tx: t.data || [], scans: sc.data || [], scanCount: sc.count || 0 };
   return state.me;
 }
@@ -261,11 +259,34 @@ function phoneField(label, name, ph) {
   return `<div><label class="label" for="${name}">${label}</label><div class="flex"><span class="flex items-center gap-1 px-3 rounded-l-[14px] border-[1.5px] border-r-0 border-[var(--line)] bg-slate-50 text-sm font-bold">+233</span><input class="input !rounded-l-none" id="${name}" name="${name}" type="tel" inputmode="tel" placeholder="${ph}"></div></div>`;
 }
 
+/* Static reviews, max 5. Add only real comments from real users who agreed to be quoted. */
+const REVIEWS = [
+  // { name: 'Name A.', city: 'Accra', date: '27 Oct, 23:04', stars: 5, text: 'Comment here' },
+];
+const ACTIVE_USERS = '0'; // EDIT: type your real active-user count
+const AVATARS = ['linear-gradient(135deg,#fbbf24,#d97706)', 'linear-gradient(135deg,#a855f7,#7c3aed)', 'linear-gradient(135deg,#10b981,#047857)', 'linear-gradient(135deg,#f43f5e,#be123c)', 'linear-gradient(135deg,#38bdf8,#0369a1)'];
+function starRow(n) { return [1, 2, 3, 4, 5].map(i => ic('star', (i <= n ? 'star-on' : 'star-off') + ' !w-[18px] !h-[18px]')).join(''); }
 function reviewsBlock() {
+  const list = REVIEWS.slice(0, 5);
+  const avg = list.length ? list.reduce((a, r) => a + r.stars, 0) / list.length : 0;
+  const pct = list.length ? Math.round(list.filter(r => r.stars >= 4).length / list.length * 100) : 0;
+  const stat = (n, l, mid) => `<div class="${mid ? 'border-x border-[var(--line)]' : ''}"><div class="font-display font-bold text-2xl">${n}</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)] mt-1">${l}</div></div>`;
   return `<section id="reviews" class="wrap mt-10">
     <div class="eyebrow">${ic('messages-square')} COMMUNITY</div>
     <h2 class="font-display font-bold text-3xl mt-1">What users are saying</h2>
-    <a href="#/feedback" class="card mt-4 p-4 flex items-center gap-3"><div class="w-11 h-11 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic('message-square-plus')}</div><div class="flex-1"><div class="font-display font-bold">Share your feedback</div><p class="text-sm text-[var(--mute)]">Tell us what is working and what to improve.</p></div>${ic('chevron-right', 'text-slate-400')}</a>
+    ${list.length ? `<div class="card mt-4 py-4 grid grid-cols-3 text-center">
+      ${stat(avg.toFixed(1) + ' <span class="star-on inline-flex align-middle">' + ic('star', 'star-on i-lg') + '</span>', 'AVERAGE RATING')}
+      ${stat(ACTIVE_USERS, 'ACTIVE USERS', true)}
+      ${stat(pct + '%', 'RATED 4+')}
+    </div>
+    <div class="mt-3 space-y-3">${list.map((r, k) => `<div class="card p-4">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-full flex-none flex items-center justify-center text-white font-display font-bold text-lg" style="background:${AVATARS[k % 5]}">${esc((r.name.trim()[0] || '?').toUpperCase())}</div>
+        <div class="flex-1 min-w-0"><div class="font-display font-bold truncate">${esc(r.name)}</div><div class="text-xs text-[var(--mute)]">${esc([r.city, r.date].filter(Boolean).join(' \u00B7 '))}</div></div>
+        <div class="flex gap-0.5 flex-none">${starRow(r.stars)}</div>
+      </div>
+      <p class="text-sm italic text-slate-600 mt-3">\u201C${esc(r.text)}\u201D</p></div>`).join('')}</div>`
+    : `<div class="card mt-4 p-5 text-center text-sm text-[var(--mute)]">Reviews from real users will appear here.</div>`}
   </section>`;
 }
 
@@ -381,10 +402,12 @@ V.landing = () => `
         <span class="chip">${ic('percent', 'text-purple-600')} Margin shown</span>
         <span class="chip" style="background:#fef2f2;color:#b91c1c;border-color:#fecaca">${ic('ban')} 18+ ONLY</span>
       </div>
-      <div class="flex items-center gap-3 mt-7 flex-wrap">
-        <a href="#/register" class="btn btn-primary">GET STARTED ${ic('wand-sparkles')}</a>
-        <a href="#/login" class="btn btn-ghost">${ic('log-in')} SIGN IN</a>
-        <a href="#how" data-action="scroll" data-target="how" class="font-semibold text-[var(--mute)] flex items-center gap-1">See how it works ${ic('chevron-right')}</a>
+      <div class="mt-7 space-y-3">
+        <a href="#/register" class="btn btn-primary w-full">GET STARTED ${ic('wand-sparkles')}</a>
+        <div class="grid grid-cols-2 gap-3">
+          <a href="#/login" class="btn btn-ghost !px-3">${ic('log-in')} SIGN IN</a>
+          <a href="#reviews" data-action="scroll" data-target="reviews" class="btn btn-ghost !px-3">${ic('messages-square')} SEE REVIEWS</a>
+        </div>
       </div>
       <div class="grid grid-cols-3 gap-3 mt-8">
         ${[['users', '#f5f3ff', '#9333ea', '7', 'LEAGUES'], ['trophy', '#fffbeb', '#d97706', 'Margin', 'REVEALED'], ['chart-line', '#ecfdf5', '#059669', 'Random', 'OUTCOMES']]
@@ -495,13 +518,17 @@ const initials = u => esc((u.first_name[0] || '') + (u.last_name[0] || ''));
 const blob = '<div class="absolute -top-16 -right-16 w-64 h-64 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>';
 const miniPhone = '<div class="w-24 rounded-[18px] p-1 bg-slate-800 shadow-lg flex-none self-start"><div class="rounded-[14px] overflow-hidden bg-slate-900" style="aspect-ratio:498/964"><img src="lobby.jpg" alt="Instant Football lobby" class="w-full h-full object-cover object-top" loading="lazy"></div></div>';
 
-/* Three stat blocks: same layout and colours as the reference, but every number is real. */
-function statBlocks(u) {
-  const topped = u.tx.filter(t => t.type === 'deposit' && t.status === 'successful').reduce((a, t) => a + Number(t.amount), 0);
+/* Static stats on the dashboard. Type your own real figures here. */
+const STATS = {
+  readings: '0',        // EDIT: readings done
+  topped:   'GH\u20B5 0', // EDIT: total topped up
+  members:  '0'         // EDIT: members
+};
+function statBlocks() {
   const items = [
-    ['chart-line', 'linear-gradient(180deg,#ecfdf5,#d1fae5)', '#86efac', '#059669', String(u.scanCount), 'READINGS DONE'],
-    ['trophy', 'linear-gradient(180deg,#fffbeb,#fef3c7)', '#fcd34d', '#d97706', 'GH\u20B5 ' + Math.round(topped).toLocaleString(), 'TOTAL TOPPED UP'],
-    ['users', 'linear-gradient(180deg,#fff1f2,#ffe4e6)', '#fda4af', '#e11d48', state.members == null ? '-' : state.members.toLocaleString(), 'MEMBERS']
+    ['chart-line', 'linear-gradient(180deg,#ecfdf5,#d1fae5)', '#86efac', '#059669', STATS.readings, 'READINGS DONE'],
+    ['trophy', 'linear-gradient(180deg,#fffbeb,#fef3c7)', '#fcd34d', '#d97706', STATS.topped, 'TOTAL TOPPED UP'],
+    ['users', 'linear-gradient(180deg,#fff1f2,#ffe4e6)', '#fda4af', '#e11d48', STATS.members, 'MEMBERS']
   ];
   return `<div class="grid grid-cols-3 gap-3">${items.map(([i, bg, bd, c, n, l]) => `<div class="rounded-[22px] py-4 px-1.5 text-center" style="background:${bg};border:1.5px solid ${bd}">
     <div class="w-10 h-10 mx-auto rounded-xl bg-white/70 flex items-center justify-center" style="color:${c}">${ic(i)}</div>
@@ -746,10 +773,7 @@ V.predict = u => {
         <button data-action="ptab" data-v="diamonds" class="btn !py-2.5 text-sm ${P.kind === 'diamonds' ? '!bg-white shadow' : '!bg-transparent text-slate-500'}">${ic('gem', 'text-purple-600')} VIP Diamonds</button>
       </div>
       <div class="mt-5 space-y-4">${TIERS[P.kind].map(t => tierRow(t, P.kind)).join('')}</div></div>
-      <div class="wrap mt-6">${lobbyBanner()}</div>
-      <div class="wrap mt-4"><div class="rounded-2xl p-4" style="background:#fffbeb;border:1.5px solid #fde68a;border-left:5px solid #f59e0b">
-        <div class="flex justify-between items-center"><div class="font-display font-bold flex items-center gap-2" style="color:#92400e">${ic('triangle-alert')} Financial Advisory &amp; Risk Disclaimer</div><span class="chip !bg-red-50 !text-red-700 !border-red-200 text-[11px]">18+ RATED</span></div>
-        <p class="text-sm mt-2" style="color:#78350f">Readings explain what the odds on your screenshot imply. They are not predictions and not guarantees. Virtual sports outcomes are random and carry real financial risk. Never stake money you cannot afford to lose.</p></div></div>`;
+      <div class="wrap mt-6">${lobbyBanner()}</div>`;
   } else if (P.step === 'scanning') {
     body = `<div class="wrap mt-6">
       <div class="rounded-[24px] p-3" style="border:2px dashed #c4b5fd;background:#faf5ff">
@@ -764,10 +788,7 @@ V.predict = u => {
         <div class="flex items-center justify-between text-xs font-bold text-slate-500 mt-2"><span id="scanPct">0%</span><span id="scanStatus" class="flex items-center gap-1.5">Uploading screenshot...</span></div>
         <div class="dots"><span></span><span></span><span></span><span></span></div>
       </div>
-      <div class="mt-4 rounded-2xl p-4 flex items-center gap-3" style="background:#fffbeb;border:1.5px solid #fde68a;border-left:5px solid #f59e0b">
-        <span class="text-amber-600 flex-none">${ic('triangle-alert')}</span><div class="flex-1 font-display font-bold text-[15px]" style="color:#92400e">Financial Advisory &amp; Risk Disclaimer</div>
-        <span class="chip !bg-red-50 !text-red-700 !border-red-200 text-[11px]">18+ RATED</span>
-      </div></div>`;
+</div>`;
   } else if (P.step === 'upload') {
     const t = P.tier;
     body = `<div class="wrap mt-6">
