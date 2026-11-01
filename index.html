@@ -89,13 +89,12 @@ html,body{background:#fff;color:var(--ink);font-family:'Plus Jakarta Sans',sans-
 const CONFIG = window.CONFIG || {
   SUPABASE_URL: 'https://hyxrwhgakduytptasihp.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_lJKyhjDgsKNZATFaDDwgNg_6vwJ2V_n',
-  support: { email: 'support@yourdomain.com', whatsapp: '233XXXXXXXXX', telegram: 'YourTelegramHandle' },
+  support: { email: 'support.virtualoddsprediction.com', whatsapp: '233XXXXXXXXX', telegram: 'VirtualOddsPrediction'},
   lobbyUrl: 'https://www.sportybet.com/gh/'
 };
 const CONFIGURED = !CONFIG.SUPABASE_URL.includes('YOUR-PROJECT');
 const BRAND = 'Virtual Odds Prediction';
 const SITE_URL = 'https://virtual-odds-prediction.vercel.app/'; // official link, used in email links
-const ACTIVATION_FEE = 1; // GHS, display only. paystack-init holds the real amount. Normal price: 50.
 localStorage.removeItem('iv_last_login');
 
 /* Display copy for tiers. The server (scan-odds function) holds the authoritative costs and match limits. */
@@ -112,7 +111,7 @@ const TIERS = {
   ]
 };
 const COIN_PACKS = [
-  { id: 'starter', name: 'Starter Coins Pack', price: 1,    desc: '1,000 coins. Enough for 1 Bronze reading.' }, // price 1 is the live test price. Normal: 350
+  { id: 'starter', name: 'Starter Coins Pack', price: 100, desc: '1,000 coins. Enough for 1 Bronze reading.' },
   { id: 'pro',     name: 'Pro Coins Pack',     price: 700,  desc: '4,500 coins to spend on any coins tier.', popular: true },
   { id: 'mega',    name: 'Mega Coins Pack',    price: 1200, desc: '8,300 coins to spend on any coins tier.' }
 ];
@@ -165,7 +164,7 @@ async function callFn(name, body, authed = true) {
    State and data
    ========================================================= */
 const state = { me: null, members: null, packTab: 'coins', txFilter: 'all', fbRating: 0, fbDraft: '' };
-const P = { step: 'tiers', kind: 'coins', tier: null, dataUrl: null, error: '', scanId: null, result: null, resultKind: 'coins', reference: '', found: 0 };
+const P = { step: 'tiers', kind: 'coins', tier: null, dataUrl: null, error: '', scanId: null, result: null, resultKind: 'coins', reference: '', found: 0, avgMargin: null };
 
 async function loadMe() {
   const s = await session();
@@ -223,24 +222,6 @@ const Auth = {
   async logout() { await sb.auth.signOut(); state.me = null; location.hash = '#/'; render(); }
 };
 
-/* =========================================================
-   Odds maths (computed in the browser, never by the model)
-   ========================================================= */
-const Odds = {
-  analyse(m) {
-    const o = m.odds || {};
-    const vals = [o.home, o.draw, o.away].map(Number);
-    if (vals.some(v => !(v > 1))) return null;
-    const raw = vals.map(v => 1 / v), sum = raw.reduce((a, b) => a + b, 0);
-    const p = raw.map(r => r / sum * 100);
-    let ou = null;
-    if (m.over_under && Number(m.over_under.over) > 1 && Number(m.over_under.under) > 1) {
-      const a = 1 / m.over_under.over, b = 1 / m.over_under.under, s = a + b;
-      ou = { line: m.over_under.line, over: a / s * 100, under: b / s * 100 };
-    }
-    return { odds: vals, p, margin: (sum - 1) * 100, fav: ['Home', 'Draw', 'Away'][p.indexOf(Math.max(...p))], ou };
-  }
-};
 async function shrinkImage(file) {
   const bmp = await createImageBitmap(file);
   const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
@@ -255,7 +236,7 @@ async function shrinkImage(file) {
 const V = {};
 const FAQ = [
   ['Can it predict who will win?', 'No. Virtual football results come from a random number generator, so nobody can predict them reliably. This tool reads the odds on your screenshot and shows what they imply, including the bookmaker margin.'],
-  ['How do I get started?', `Create an account and pay the one-time ${money(ACTIVATION_FEE)} activation fee, buy a package, then upload a screenshot of the Instant Football lobby on the Predictions page and pick the fixtures to read.`],
+  ['How do I get started?', 'Create a free account, buy a package, then upload a screenshot of the Instant Football lobby on the Predictions page.'],
   ['What happens to my screenshot?', 'It is sent securely to our server, read by our AI vision engine, and the extracted fixtures and odds are stored with your account. The image itself is not kept.'],
   ['Does paying more improve my chances?', 'No. Coins and diamonds only pay for readings. They do not change the odds or the outcome of any game.']
 ];
@@ -313,7 +294,7 @@ function aboutBlock() {
       <div><div class="font-display font-bold text-2xl text-amber-300">Random</div><div class="text-xs text-slate-400 mt-1">Outcomes, always</div></div>
     </div>
     <div class="mt-4 space-y-3">
-      ${[['brain', '#f5f3ff', '#7c3aed', 'Vision-based odds reader', 'Our AI vision engine reads the fixture rows and odds from your screenshot. The probability and margin maths is done in your browser, not guessed by the model.'],
+      ${[['brain', '#f5f3ff', '#7c3aed', 'Vision-based odds reader', 'Our AI vision engine reads the fixture rows and odds from your screenshot. It then works out the implied probabilities and the bookmaker margin, and our server double-checks every figure before you see it.'],
          ['shield-check', '#ecfdf5', '#059669', 'Honest by design', 'No win-rate claims and no invented reviews. We tell you plainly that results are random and that losses are part of the game.'],
          ['headset', '#eff6ff', '#0284c7', 'Support', 'Questions about a deposit or a reading? Reach us on WhatsApp, Telegram or email.']]
         .map(([i, bg, col, t, d]) => `<div class="card p-4 flex gap-4"><div class="w-12 h-12 rounded-2xl flex-none flex items-center justify-center" style="background:${bg};color:${col}">${ic(i, 'i-lg')}</div><div><div class="font-display font-bold">${t}</div><p class="text-sm text-[var(--mute)] mt-1">${d}</p></div></div>`).join('')}
@@ -375,7 +356,7 @@ function walletCard(u, variant = 'dash') {
 }
 function lobbyBanner() {
   return `<div class="dark-card p-4 flex items-center gap-3" style="border:1px solid #334155">
-    <img src="logo.png" alt="" class="w-14 h-14 rounded-full flex-none">
+    <img src="instant-virtuals.png" alt="Instant Virtuals" class="w-14 h-14 rounded-2xl flex-none object-cover">
     <div class="flex-1 min-w-0"><div class="flex gap-2 text-[11px] font-bold"><span class="px-2 py-0.5 rounded bg-red-500/20 text-red-300">SPORTYBET LIVE</span><span class="text-sky-300">Games lobby</span></div>
     <div class="font-display font-bold mt-1">Play on SportyBet Virtuals</div><p class="text-xs text-slate-400">Opens in a new tab. We are not affiliated with SportyBet.</p></div>
     <a href="${CONFIG.lobbyUrl}" target="_blank" rel="noopener" class="w-11 h-11 rounded-full bg-red-500 flex items-center justify-center flex-none" aria-label="Open SportyBet">${ic('external-link')}</a></div>`;
@@ -418,7 +399,7 @@ V.landing = () => `
       <h2 class="font-display font-bold text-2xl mt-3 text-emerald-900">Instant Football Fixture Scanner</h2>
       <p class="text-emerald-800 text-[15px] mt-2">Take a screenshot of your match lobby (like below) and the reader pulls out every fixture and its odds in seconds.</p>
       <div class="relative mx-auto mt-5 w-44 rounded-[26px] p-1.5 bg-slate-800 shadow-xl" style="transform:rotate(3deg)">
-        <div class="rounded-[20px] overflow-hidden bg-slate-900" style="aspect-ratio:498/1080"><img src="lobby.jpg" alt="Instant Football lobby screenshot" class="w-full h-full object-cover object-top" loading="lazy"></div>
+        <div class="rounded-[20px] overflow-hidden bg-slate-900" style="aspect-ratio:498/964"><img src="lobby.jpg" alt="Instant Football lobby screenshot" class="w-full h-full object-cover object-top" loading="lazy"></div>
       </div>
       <div class="inline-flex items-center gap-2 bg-slate-900 text-white text-xs font-semibold rounded-full px-3 py-2 -mt-3 relative"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>Reads: England, Spain, Germany &amp; more</div>
       <div class="mt-4"><a href="#/predict" class="btn btn-green">${ic('wand-sparkles')} TRY THE ODDS READER ${ic('arrow-right')}</a></div>
@@ -446,7 +427,7 @@ V.landing = () => `
     ${lobbyBanner()}
     <div class="dark-card p-6 mt-4 text-center">
       <h3 class="font-display font-bold text-2xl">Ready to read the odds?</h3>
-      <p class="text-slate-300 text-[15px] mt-2">Create an account to get started. A one-time ${money(ACTIVATION_FEE)} activation fee applies.</p>
+      <p class="text-slate-300 text-[15px] mt-2">Create a free account to get started.</p>
       <a href="#/register" class="btn btn-primary w-full mt-5">GET STARTED ${ic('arrow-right')}</a>
       <p class="text-sm text-slate-400 mt-4">Already have an account? <a href="#/login" class="text-purple-300 font-bold underline">Log In</a></p>
     </div>
@@ -465,7 +446,6 @@ V.register = () => `${head('#/')}
       ${phoneField('Phone number', 'phone', '24 123 4567')}
       ${pwField('Password (min 6 characters)', 'password', 'new-password')}
       ${pwField('Confirm password', 'confirm', 'new-password')}
-      <div class="rounded-2xl p-3 text-sm flex gap-2" style="background:#faf5ff;border:1.5px solid #e9d5ff;color:#5b21b6"><span class="flex-none">${ic('info')}</span><span>A one-time <b>${money(ACTIVATION_FEE)}</b> activation fee is required after sign-up before you can use the app. Pay with MTN MoMo or Telecel Cash.</span></div>
       <label class="flex gap-3 items-start text-sm"><input type="checkbox" name="terms" class="mt-1 w-4 h-4 accent-purple-600"> <span>I agree to the Terms &amp; Conditions and confirm I am 18 or older.</span></label>
       <p id="formErr" class="text-sm font-semibold text-red-600 hidden"></p>
       <button class="btn btn-primary w-full" type="submit">Create Account</button>
@@ -510,17 +490,18 @@ V.reset = () => `${head('')}
     </form>
   </main>`;
 
-const PRESETS = [50, 100, 200, 500];
+const PRESETS = [100, 200, 300, 500];
 const initials = u => esc((u.first_name[0] || '') + (u.last_name[0] || ''));
 const blob = '<div class="absolute -top-16 -right-16 w-64 h-64 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>';
-const miniPhone = '<div class="w-24 rounded-[18px] p-1 bg-slate-800 shadow-lg flex-none self-start"><div class="rounded-[14px] overflow-hidden bg-slate-900" style="aspect-ratio:498/1080"><img src="lobby.jpg" alt="Instant Football lobby" class="w-full h-full object-cover object-top" loading="lazy"></div></div>';
+const miniPhone = '<div class="w-24 rounded-[18px] p-1 bg-slate-800 shadow-lg flex-none self-start"><div class="rounded-[14px] overflow-hidden bg-slate-900" style="aspect-ratio:498/964"><img src="lobby.jpg" alt="Instant Football lobby" class="w-full h-full object-cover object-top" loading="lazy"></div></div>';
 
-/* Static stats blocks as requested */
-function statBlocks() {
+/* Three stat blocks: same layout and colours as the reference, but every number is real. */
+function statBlocks(u) {
+  const topped = u.tx.filter(t => t.type === 'deposit' && t.status === 'successful').reduce((a, t) => a + Number(t.amount), 0);
   const items = [
-    ['chart-line', 'linear-gradient(180deg,#ecfdf5,#d1fae5)', '#86efac', '#059669', '50,000+', 'SIMULATIONS'],
-    ['trophy', 'linear-gradient(180deg,#fffbeb,#fef3c7)', '#fcd34d', '#d97706', '99.4%', 'ACCURACY RATE'],
-    ['users', 'linear-gradient(180deg,#fff1f2,#ffe4e6)', '#fda4af', '#e11d48', '15,200+', 'ACTIVE USERS']
+    ['chart-line', 'linear-gradient(180deg,#ecfdf5,#d1fae5)', '#86efac', '#059669', String(u.scanCount), 'READINGS DONE'],
+    ['trophy', 'linear-gradient(180deg,#fffbeb,#fef3c7)', '#fcd34d', '#d97706', 'GH\u20B5 ' + Math.round(topped).toLocaleString(), 'TOTAL TOPPED UP'],
+    ['users', 'linear-gradient(180deg,#fff1f2,#ffe4e6)', '#fda4af', '#e11d48', state.members == null ? '-' : state.members.toLocaleString(), 'MEMBERS']
   ];
   return `<div class="grid grid-cols-3 gap-3">${items.map(([i, bg, bd, c, n, l]) => `<div class="rounded-[22px] py-4 px-1.5 text-center" style="background:${bg};border:1.5px solid ${bd}">
     <div class="w-10 h-10 mx-auto rounded-xl bg-white/70 flex items-center justify-center" style="color:${c}">${ic(i)}</div>
@@ -537,7 +518,7 @@ V.dashboard = u => `
       <button class="relative w-11 h-11 rounded-full bg-white border border-[var(--line)] flex items-center justify-center" data-action="bell" aria-label="Notifications">${ic('bell')}${u.tx.some(t => t.status === 'pending') ? '<span class="absolute top-2 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full"></span>' : ''}</button>
     </div>
     <div class="wrap mt-4 relative">${walletCard(u, 'dash')}</div>
-    <div class="wrap mt-4 relative">${statBlocks()}</div>
+    <div class="wrap mt-4 relative">${statBlocks(u)}</div>
   </div>
 
   <section class="wrap mt-7">
@@ -657,7 +638,7 @@ V.deposit = u => {
     <div class="card p-5 mt-4 space-y-4">
       <div><span class="label">Choose an amount (GH\u20B5)</span>
         <div class="grid grid-cols-4 gap-2">${PRESETS.map(a => `<button data-action="preset" data-v="${a}" class="rounded-2xl py-3 text-sm font-bold border-[1.5px] border-[var(--line)] bg-white">${a}</button>`).join('')}</div></div>
-      <div><label class="label" for="depAmount">Or enter an amount</label><input id="depAmount" class="input" type="number" min="1" max="5000" inputmode="decimal" placeholder="100"></div>
+      <div><label class="label" for="depAmount">Or enter an amount</label><input id="depAmount" class="input" type="number" min="100" max="5000" inputmode="decimal" placeholder="100"></div>
       <div class="rounded-2xl bg-slate-50 p-3 text-sm flex gap-2 text-slate-700"><span class="text-emerald-600 flex-none">${ic('shield-check')}</span><span>Secure checkout by Paystack for MTN MoMo and Telecel Cash. You approve the payment on your phone.</span></div>
       <p id="formErr" class="text-sm font-semibold text-red-600 hidden"></p>
       <button data-action="paydeposit" class="btn btn-primary w-full">${ic('smartphone')} Pay with MoMo</button>
@@ -681,9 +662,10 @@ function tierRow(t, kind) {
 }
 
 function matchCard(m, detailed) {
-  const a = Odds.analyse(m);
-  if (!a) return '';
-  const idx = a.p.indexOf(Math.max(...a.p));
+  const an = m.analysis;
+  if (!an) return '';
+  const a = { odds: [m.odds.home, m.odds.draw, m.odds.away].map(Number), p: an.p, margin: an.margin, ou: an.ou };
+  const idx = ['Home', 'Draw', 'Away'].indexOf(an.fav);
   const names = ['HOME WIN (1)', 'DRAW (X)', 'AWAY WIN (2)'], cap = ['Home', 'Draw', 'Away'], hd = ['1', 'X', '2'];
   const seg = ['#22c55e', '#f59e0b', '#6d28d9'], txt = ['#16a34a', '#d97706', '#6d28d9'];
   const chip = a.ou
@@ -691,9 +673,8 @@ function matchCard(m, detailed) {
     : `Margin ${a.margin.toFixed(1)}%`;
   const team = (t, full) => `<div class="text-center min-w-[84px] max-w-[110px]"><div class="rounded-2xl px-3 py-3 font-display font-bold text-xl bg-slate-50" style="border:1.5px solid #eef0f6">${esc(t)}</div>${full ? `<div class="text-[11px] text-slate-500 mt-1 leading-tight">${esc(full)}</div>` : ''}</div>`;
   const leagueName = m.league ? (/league|cup|champions|euro/i.test(m.league) ? m.league : m.league + ' Virtual League') : 'Virtual football';
-  const gap = [...a.p].sort((x, y) => y - x);
-  const shape = gap[0] >= 50 ? 'Clear favourite' : (gap[0] - gap[1] < 5 ? 'Balanced match' : 'Slight favourite');
-  const fair = a.p.map(v => (100 / v).toFixed(2)).join(' / ');
+  const shape = an.spread;
+  const fair = an.fair.map(v => Number(v).toFixed(2)).join(' / ');
   return `<div class="rounded-[22px] p-4 bg-white" style="border:1.5px solid #e6e8f2;border-left:4px solid #6d28d9;box-shadow:0 12px 26px -20px rgba(15,18,38,.45)">
     <div class="flex items-center gap-2">
       <div class="flex items-center gap-1.5 text-sm font-bold text-slate-700 flex-1 min-w-0"><span class="text-purple-700 flex-none">${ic('trophy', '!w-4 !h-4')}</span><span class="truncate">${esc(leagueName)}</span></div>
@@ -721,8 +702,9 @@ function matchCard(m, detailed) {
 }
 function readingText() {
   const lines = P.result.map(m => {
-    const a = Odds.analyse(m); if (!a) return '';
-    return `${m.match_no}) ${m.home} vs ${m.away}${m.league ? ' (' + m.league + ')' : ''}  1X2: ${a.odds.map(o => o.toFixed(2)).join(' / ')}  implied: ${a.p.map(v => v.toFixed(0) + '%').join(' / ')}  shortest price: ${a.fav}`;
+    const an = m.analysis; if (!an) return '';
+    const o = [m.odds.home, m.odds.draw, m.odds.away].map(x => Number(x).toFixed(2)).join(' / ');
+    return `${m.match_no}) ${m.home} vs ${m.away}${m.league ? ' (' + m.league + ')' : ''}  1X2: ${o}  implied: ${an.p.map(v => v.toFixed(0) + '%').join(' / ')}  shortest price: ${an.fav}`;
   }).filter(Boolean);
   return `${BRAND} reading ${P.reference}\n${lines.join('\n')}\nThese figures describe the odds, not the result.`;
 }
@@ -777,7 +759,7 @@ V.predict = u => {
       <div class="mt-4 rounded-[24px] p-5 text-center bg-white" style="border:1.5px solid #7dd3fc;box-shadow:0 14px 30px -20px rgba(14,165,233,.5)">
         <div id="scanIcon"><div class="ring text-sky-700">${ic('brain', '!w-8 !h-8')}</div></div>
         <div id="scanTitle" class="font-display font-bold text-lg mt-4">Scanning screenshot...</div>
-        <span id="scanPill" class="inline-block text-xs font-bold rounded-lg px-3 py-1.5 mt-2" style="background:#dcfce7;color:#15803d">OCR.space Neural Vision Engine Active</span>
+        <span id="scanPill" class="inline-block text-xs font-bold rounded-lg px-3 py-1.5 mt-2" style="background:#dcfce7;color:#15803d">Neural Vision Engine Active</span>
         <div class="bar mt-5" style="height:8px"><span id="scanBar" style="width:0%;background:linear-gradient(90deg,#2563eb,#4f46e5,#10b981)"></span></div>
         <div class="flex items-center justify-between text-xs font-bold text-slate-500 mt-2"><span id="scanPct">0%</span><span id="scanStatus" class="flex items-center gap-1.5">Uploading screenshot...</span></div>
         <div class="dots"><span></span><span></span><span></span><span></span></div>
@@ -801,8 +783,7 @@ V.predict = u => {
       <button data-action="scan" class="btn btn-primary w-full mt-4" ${P.dataUrl ? '' : 'disabled'}>${ic('wand-sparkles')} Scan screenshot</button>
       ${P.dataUrl ? '<button data-action="clearimg" class="btn btn-ghost w-full mt-2 !py-3 text-sm">Remove screenshot</button>' : ''}</div>`;
   } else if (P.step === 'result') {
-    const margins = P.result.map(m => (Odds.analyse(m) || {}).margin).filter(v => typeof v === 'number');
-    const avg = margins.length ? (margins.reduce((a, b) => a + b, 0) / margins.length).toFixed(1) : '-';
+    const avg = P.avgMargin == null ? '-' : Number(P.avgMargin).toFixed(1);
     body = `<div class="wrap mt-6 space-y-3">
       <div class="flex items-center justify-between gap-2"><h2 class="font-display font-bold text-xl">Your readings</h2><span class="chip text-xs">${esc(P.tier.name)} &middot; ${P.found} fixtures read</span></div>
       ${P.result.map(m => matchCard(m, P.resultKind === 'diamonds')).join('')}
@@ -864,7 +845,7 @@ V.about = u => {
     <div class="mt-4 space-y-3">
       ${side('#7c3aed', '#f5f3ff', 'target', 'Our Mission', 'To explain virtual football odds clearly: what each price implies, how big the bookmaker margin is, and why results are still random.')}
       ${side('#10b981', '#ecfdf5', 'compass', 'Our Vision', 'Players who understand the odds before they stake, and who treat virtual football as entertainment with firm limits.')}
-      ${side('#0ea5e9', '#f0f9ff', 'cpu', 'How the Reader Works', 'Our AI vision engine reads the teams and the 1X2 and over/under odds from your screenshot. The probability and margin maths is then calculated in your browser.')}
+      ${side('#0ea5e9', '#f0f9ff', 'cpu', 'How the Reader Works', 'Our AI vision engine reads the teams and the 1X2 and over/under odds from your screenshot. It then works out the implied probabilities and the bookmaker margin, and our server double-checks them before showing them.')}
       ${side('#f59e0b', '#fffbeb', 'shield-check', 'Security & Responsible Gaming', 'Accounts use Supabase authentication over HTTPS, and payments are processed by Paystack, so we never see your MoMo PIN. 18+ only. Play responsibly.')}
     </div>
     <h2 class="font-display font-bold text-xl mt-7 flex items-center gap-2"><span class="text-purple-600">${ic('workflow', 'i-lg')}</span> How Our Odds Reader Works</h2>
@@ -925,6 +906,8 @@ V.report = u => {
   </div><div class="h-32"></div>`;
 };
 
+/* Sends a ticket or feedback to the developer's email through a form handler (Formspree-style endpoint).
+   If CONFIG.FORM_ENDPOINT is empty it falls back to opening the user's email app. */
 async function sendToDeveloper(payload) {
   const me = state.me || {};
   const data = {
@@ -943,8 +926,6 @@ async function sendToDeveloper(payload) {
 }
 
 V.profile = u => {
-  const act = u.tx.find(t => t.type === 'activation' && t.status === 'successful');
-  const fee = act ? Math.abs(Number(act.amount)) : ACTIVATION_FEE;
   const list = u.tx.filter(t => state.txFilter === 'all' || t.status === state.txFilter);
   return `${pageTitle('Profile')}
   <div class="wrap mt-4">
@@ -954,7 +935,7 @@ V.profile = u => {
       <dl class="mt-4 text-sm space-y-2.5">
         <div class="flex justify-between"><dt class="text-[var(--mute)]">Email</dt><dd class="font-semibold">${esc(u.email)}</dd></div>
         <div class="flex justify-between"><dt class="text-[var(--mute)]">Phone</dt><dd class="font-semibold">+233 ${esc(u.phone)}</dd></div>
-        <div class="flex justify-between"><dt class="text-[var(--mute)]">License type</dt><dd class="font-semibold text-emerald-600">Permanent license (${money(fee)})</dd></div>
+        <div class="flex justify-between"><dt class="text-[var(--mute)]">License type</dt><dd class="font-semibold text-emerald-600">Free account</dd></div>
       </dl>
     </div>
     <div class="card p-5 mt-4">
@@ -973,6 +954,16 @@ V.profile = u => {
   </div><div class="h-28"></div>`;
 };
 
+/* =========================================================
+   Router
+   ========================================================= */
+/* =========================================================
+   Paystack checkout + live wallet updates
+   ========================================================= */
+/* =========================================================
+   Popups and Paystack checkout
+   ========================================================= */
+
 function popup({ icon = 'circle-check', tone = 'green', title, text, button = 'Continue' }) {
   return new Promise(resolve => {
     const t = tone === 'purple' ? ['#f5f3ff', '#7c3aed'] : ['#ecfdf5', '#059669'];
@@ -988,31 +979,9 @@ function popup({ icon = 'circle-check', tone = 'green', title, text, button = 'C
   });
 }
 
-V.activate = u => `<div style="min-height:100vh;background:linear-gradient(180deg,#fafaff 0%,#f3e8ff 100%)">
-  <div class="wrap pt-6 pb-10">
-    <div class="rounded-[28px] bg-white p-5" style="border:1.5px solid #e9d5ff;box-shadow:0 24px 50px -28px rgba(124,58,237,.45)">
-      <div class="flex items-center justify-between">
-        <a href="#/" class="w-11 h-11 rounded-xl border border-[var(--line)] bg-slate-50 flex items-center justify-center" aria-label="Back">${ic('arrow-left')}</a>
-        <span class="chip !bg-purple-50 !text-purple-700 !border-purple-200 font-bold">${ic('shield-check')} Secured by Paystack</span>
-      </div>
-      <h1 class="font-display font-bold text-3xl mt-5">Account Activation</h1>
-      <p class="text-[var(--mute)] mt-2">Hi ${esc(u.first_name)}, complete the one-time payment to activate your account and start using the odds reader.</p>
-      <div class="rounded-[22px] p-5 mt-5 flex items-center justify-between gap-3 text-white" style="background:linear-gradient(135deg,#0f1226,#1e1b4b);box-shadow:0 16px 30px -18px rgba(15,18,38,.8)">
-        <div><div class="text-[11px] font-extrabold tracking-wider text-purple-300">ONE-TIME ACTIVATION FEE</div><div class="text-sm text-slate-300 mt-1">Pay once. No monthly charge.</div></div>
-        <div class="font-display font-bold text-3xl whitespace-nowrap">${money(ACTIVATION_FEE)}</div>
-      </div>
-      <label class="label mt-5">Email address</label>
-      <div class="relative"><span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">${ic('mail')}</span><input class="input !pl-12 !bg-slate-50" value="${esc(u.email)}" readonly aria-readonly="true"></div>
-      <p class="text-sm text-[var(--mute)] mt-4">Pay with <b>MTN MoMo</b> or <b>Telecel Cash</b>. You enter your MoMo number in the secure checkout and approve the payment on your phone.</p>
-      <p class="text-xs text-[var(--mute)] mt-2">Coins, diamonds and readings are bought separately.</p>
-      <button data-action="payactivate" class="btn btn-primary w-full mt-5 !py-4">${ic('zap')} Pay ${money(ACTIVATION_FEE)} with MoMo ${ic('zap')}</button>
-      <p class="text-center text-xs text-[var(--mute)] mt-4 flex items-center justify-center gap-1.5"><span class="text-emerald-600">${ic('lock', '!w-3.5 !h-3.5')}</span> MTN &bull; Telecel | Payments by Paystack</p>
-    </div>
-    <button data-action="logout" class="block mx-auto mt-5 text-sm font-bold text-slate-500 underline">Sign out</button>
-  </div></div>`;
-
+/* Returns 'successful' | 'failed' | 'canceled' | 'pending'. Callers decide what to show. */
 async function confirmPayment(ref) {
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < 24; i++) { // MoMo approvals can take a minute
     const r = await callFn('paystack-verify', { reference: ref });
     if (r.status === 'successful') return 'successful';
     if (r.status === 'failed') return 'failed';
@@ -1031,13 +1000,15 @@ async function pay(payload) {
     });
   });
   if (outcome === 'cancel') {
+    // Closing the pop-up marks the transaction Canceled (unless Paystack says it was actually paid).
     try { const r = await callFn('paystack-verify', { reference: init.reference, cancel: true }); return r.status === 'successful' ? 'successful' : 'canceled'; }
     catch { return 'canceled'; }
   }
   toast('Confirming your payment...');
   return confirmPayment(init.reference);
 }
-
+/* Self-healing: asks the server to re-check recent unpaid-looking payments with Paystack and credit any that
+   actually succeeded (covers slow MoMo approvals and a missed webhook). Safe to run repeatedly. */
 let reconAt = 0;
 async function reconcilePayments(force) {
   if (!force && Date.now() - reconAt < 45000) return 0;
@@ -1063,13 +1034,13 @@ function watchWallet(uid) {
   const ch = sb.channel('wallet-' + uid)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: 'id=eq.' + uid }, () => {
       const page = location.hash.replace(/^#\/?/, '');
-      if (['dashboard', 'packages', 'deposit', 'profile', 'activate'].includes(page)) render(true);
+      if (['dashboard', 'packages', 'deposit', 'profile'].includes(page)) render(true);
     })
     .subscribe();
   wallet = { uid, ch };
 }
 
-const PROTECTED = ['dashboard', 'packages', 'deposit', 'predict', 'profile', 'feedback', 'report', 'activate'];
+const PROTECTED = ['dashboard', 'packages', 'deposit', 'predict', 'profile', 'feedback', 'report'];
 const GUEST_ONLY = ['login', 'register'];
 let renderTok = 0;
 async function render(keep) {
@@ -1086,10 +1057,6 @@ async function render(keep) {
   if (s) { me = await loadMe(); if (!me && PROTECTED.includes(name)) { toast('Could not load your account. Check the Supabase setup.'); } }
   if (tok !== renderTok) return;
   if (PROTECTED.includes(name) && !me) { $('#app').innerHTML = head('') + '<div class="wrap pt-6"><p class="text-[var(--mute)]">Account data is unavailable. Make sure schema.sql has been run in Supabase, then refresh.</p></div>'; return; }
-  if (me && PROTECTED.includes(name)) {
-    if (!me.activated && name !== 'activate') { location.hash = '#/activate'; return; }
-    if (me.activated && name === 'activate') { location.hash = '#/dashboard'; return; }
-  }
   if (me) watchWallet(me.id);
   const html = V[name](me);
   const showNav = me && ['dashboard', 'packages', 'profile', 'feedback', 'report'].includes(name);
@@ -1105,6 +1072,12 @@ sb.auth.onAuthStateChange(ev => {
   if (ev === 'SIGNED_OUT') { state.me = null; }
 });
 
+/* =========================================================
+   Events
+   ========================================================= */
+function showErr(m) { const e = $('#formErr'); if (e) { e.textContent = m; e.classList.toggle('hidden', !m); } }
+async function go(fn) { try { await fn(); } catch (e) { toast(msg(e)); } }
+
 document.addEventListener('submit', async e => {
   const form = e.target.closest('form[data-form]'); if (!form) return;
   e.preventDefault();
@@ -1115,13 +1088,12 @@ document.addEventListener('submit', async e => {
       const live = await Auth.register({ first: fd.get('first') || '', other: fd.get('other') || '', last: fd.get('last') || '', email: fd.get('email') || '', phone: fd.get('phone') || '', password: fd.get('password') || '', confirm: fd.get('confirm') || '', terms: !!fd.get('terms') });
       if (!live) { showErr(''); toast('Check your email to confirm your account, then sign in.'); location.hash = '#/login'; return; }
       await loadMe();
-      await popup({ title: 'Account created!', text: 'Welcome, ' + (fd.get('first') || '').trim() + '. One last step: pay the one-time activation fee to start using the app.', button: 'Continue to activation' });
-      location.hash = '#/activate'; await render(); return;
+      await popup({ title: 'Account created!', text: 'Welcome, ' + (fd.get('first') || '').trim() + '. Your account is ready to use.', button: 'Continue' });
+      location.hash = '#/dashboard'; await render(); return;
     } else if (type === 'login') {
       await Auth.login(fd.get('identifier') || '', fd.get('password') || '', !!fd.get('remember'));
       const me = await loadMe();
       if (!me) throw 'Could not load your account. Please try again.';
-      if (!me.activated) { toast('Account pending activation fee.'); location.hash = '#/activate'; await render(); return; }
       await popup({ title: 'Login successful', text: 'Welcome back, ' + me.first_name + '!', button: 'Continue' });
       location.hash = '#/dashboard'; await render(); return;
     } else if (type === 'reset') {
@@ -1164,20 +1136,12 @@ document.addEventListener('click', async e => {
     case 'preset': { const i = $('#depAmount'); if (i) i.value = v; break; }
     case 'paydeposit': {
       const amount = Number(($('#depAmount') || {}).value);
-      if (!(amount >= 1 && amount <= 5000)) return showErr('Enter an amount between GH\u20B51 and GH\u20B55,000.');
+      if (!(amount >= 100 && amount <= 5000)) return showErr('Enter an amount between GH\u20B5100 and GH\u20B55,000.');
       showErr(''); b.disabled = true;
       go(async () => { await settle(await pay({ kind: 'deposit', amount }), 'Payment received. Your balance is updated.'); }).finally(() => { b.disabled = false; });
       break;
     }
     case 'paypack': b.disabled = true; go(async () => { await settle(await pay({ kind: 'package', package_id: b.dataset.id }), 'Payment received. Your package is added.'); }).finally(() => { b.disabled = false; }); break;
-    case 'payactivate': b.disabled = true; go(async () => {
-      const st = await pay({ kind: 'activation' });
-      if (st === 'successful') {
-        await loadMe();
-        await popup({ title: 'Account activated', text: 'Your payment was received. Welcome aboard!', button: 'Go to dashboard' });
-        location.hash = '#/dashboard'; await render();
-      } else await settle(st, '');
-    }).finally(() => { b.disabled = false; }); break;
     case 'refresh': reconcilePayments(true).then(n => { if (!n) toast('No new confirmed payments yet. Try again in a minute.'); }); break;
     case 'filter': state.txFilter = v; render(); break;
     case 'star': state.fbDraft = ($('#fbText') || {}).value || ''; state.fbRating = Number(v); render(true); break;
@@ -1202,6 +1166,7 @@ document.addEventListener('click', async e => {
       } finally { b.disabled = false; }
     }); break;
     case 'logout': Auth.logout(); break;
+    /* predictions flow */
     case 'ptab': P.kind = v; render(); break;
     case 'pickTier': P.tier = TIERS[P.kind].find(t => t.id === b.dataset.id); P.step = 'upload'; P.error = ''; render(); break;
     case 'changetier': P.step = 'tiers'; render(); break;
@@ -1246,7 +1211,7 @@ async function runScan() {
   try {
     const r = await callFn('scan-odds', { action: 'scan', tier: t.id, image: P.dataUrl.split(',')[1] });
     clearInterval(timer);
-    Object.assign(P, { scanId: r.scan_id, result: r.matches, resultKind: r.kind, reference: r.reference, found: r.found, step: 'result' });
+    Object.assign(P, { scanId: r.scan_id, result: r.matches, resultKind: r.kind, reference: r.reference, found: r.found, avgMargin: r.avg_margin, step: 'result' });
   } catch (err) {
     clearInterval(timer);
     P.error = msg(err); P.step = 'upload';
