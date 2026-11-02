@@ -661,83 +661,87 @@ function tierRow(t, kind) {
     </div>${ic('chevron-right', 'text-purple-600 flex-none')}</button>`;
 }
 
-function readingText() {
-  const matchesArr = P.result || P.matches;
-  if (!matchesArr || !Array.isArray(matchesArr)) return '';
-  const lines = matchesArr.map(m => {
-    const an = m.analysis; if (!an) return '';
-    const o = [m.odds.home, m.odds.draw, m.odds.away].map(x => Number(x).toFixed(2)).join(' / ');
-    const pickName = an.pick ? an.pick.toUpperCase() : 'HOME';
-    return `${m.match_no}) ${m.home} vs ${m.away}${m.league ? ' (' + m.league + ')' : ''}  1X2: ${o}  implied: ${an.p.map(v => v.toFixed(0) + '%').join(' / ')}  pick: ${pickName}`;
-  }).filter(Boolean);
-  return `${BRAND} reading ${P.reference}\n${lines.join('\n')}\nThese figures describe the odds, not the result.`;
-}
-
 function matchCard(m, detailed) {
   const an = m.analysis;
   if (!an) return '';
   const a = { odds: [m.odds.home, m.odds.draw, m.odds.away].map(Number), p: an.p, margin: an.margin, ou: an.ou };
-  const keys = ['home', 'draw', 'away'];
-  const pickIdx = keys.indexOf(an.pick); // 0 for Home, 1 for Draw, 2 for Away
-  const cap = ['Home', 'Draw', 'Away'], hd = ['1', 'X', '2'];
+  const idx = ['Home', 'Draw', 'Away'].indexOf(an.fav);
+  const names = ['HOME WIN (1)', 'DRAW (X)', 'AWAY WIN (2)'], cap = ['Home', 'Draw', 'Away'], hd = ['1', 'X', '2'];
   const seg = ['#22c55e', '#f59e0b', '#6d28d9'], txt = ['#16a34a', '#d97706', '#6d28d9'];
-  
-  // Dynamic colors: Home = Green, Away = Purple, Draw = Amber
-  const isAway = pickIdx === 2;
-  const isDraw = pickIdx === 1;
-  
-  const themeColor = isAway ? '#7c3aed' : (isDraw ? '#d97706' : '#10b981');
-  const themeBg = isAway ? 'linear-gradient(135deg,#7c3aed,#5b21b6)' : (isDraw ? 'linear-gradient(135deg,#d97706,#b45309)' : 'linear-gradient(135deg,#059669,#047857)');
-  const boxBg = isAway ? '#faf5ff' : (isDraw ? '#fffbeb' : '#ecfdf5');
-  const badgeBg = isAway ? '#7c3aed' : (isDraw ? '#d97706' : '#10b981');
-  
+  const chip = a.ou
+    ? (a.ou.over >= a.ou.under ? `Over ${a.ou.line} &middot; ${a.ou.over.toFixed(0)}%` : `Under ${a.ou.line} &middot; ${a.ou.under.toFixed(0)}%`)
+    : `Margin ${a.margin.toFixed(1)}%`;
   const team = (t, full) => `<div class="text-center min-w-[84px] max-w-[110px]"><div class="rounded-2xl px-3 py-3 font-display font-bold text-xl bg-slate-50" style="border:1.5px solid #eef0f6">${esc(t)}</div>${full ? `<div class="text-[11px] text-slate-500 mt-1 leading-tight">${esc(full)}</div>` : ''}</div>`;
   const leagueName = m.league ? (/league|cup|champions|euro/i.test(m.league) ? m.league : m.league + ' Virtual League') : 'Virtual football';
-  const ouBadge = a.ou ? `Under ${a.ou.line} Goals` : `Margin ${a.margin.toFixed(1)}%`;
-
-  return `<div class="rounded-[22px] p-4 bg-white" style="border:1.5px solid #e6e8f2;border-left:4px solid ${themeColor};box-shadow:0 12px 26px -20px rgba(15,18,38,.45)">
+  const shape = an.spread;
+  const fair = an.fair.map(v => Number(v).toFixed(2)).join(' / ');
+  return `<div class="rounded-[22px] p-4 bg-white" style="border:1.5px solid #e6e8f2;border-left:4px solid #6d28d9;box-shadow:0 12px 26px -20px rgba(15,18,38,.45)">
     <div class="flex items-center gap-2">
       <div class="flex items-center gap-1.5 text-sm font-bold text-slate-700 flex-1 min-w-0"><span class="text-purple-700 flex-none">${ic('trophy', '!w-4 !h-4')}</span><span class="truncate">${esc(leagueName)}</span></div>
       <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg whitespace-nowrap" style="background:#ede9fe;color:#5b21b6">Match ${m.match_no}</span>
-      <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 whitespace-nowrap" style="background:${boxBg};color:${isAway ? '#6b21a8' : (isDraw ? '#92400e' : '#15803d')}">${ic('check-circle', '!w-3.5 !h-3.5')} ${an.confidence}% Confidence</span>
+      <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 whitespace-nowrap" style="background:#dcfce7;color:#166534">${ic('chart-pie', '!w-3.5 !h-3.5')} ${a.p[idx].toFixed(0)}% implied</span>
     </div>
-    
     <div class="flex items-center justify-between mt-4">
       ${team(m.home, m.home_full)}
       <div class="text-center"><div class="w-9 h-9 rounded-full bg-slate-900 text-white text-xs font-bold flex items-center justify-center mx-auto">VS</div><div class="text-[10px] font-extrabold tracking-wider text-purple-700 mt-1">1X2</div></div>
       ${team(m.away, m.away_full)}
     </div>
-
-    <div class="grid grid-cols-3 gap-2.5 mt-4">
-      ${[0, 1, 2].map(i => {
-        const isPick = i === pickIdx;
-        return `<div class="rounded-2xl py-3 text-center relative" style="${isPick ? `background:${boxBg};border:2px solid ${themeColor};box-shadow:0 4px 12px rgba(0,0,0,0.06)` : 'background:#fff;border:1.5px solid #eef0f6'}">
-          ${isPick ? `<span class="absolute -top-3 left-1/2 -translate-x-1/2 text-[9px] font-extrabold text-white px-2 py-0.5 rounded-full uppercase tracking-wider" style="background:${badgeBg}">${hd[i]} ✓ PICK</span>` : ''}
-          <div class="flex items-center justify-center gap-1 text-xs font-bold text-slate-500">${hd[i]}</div>
-          <div class="font-display font-bold text-xl mt-0.5">${a.odds[i].toFixed(2)}</div>
-          <div class="text-[11px] text-slate-400">${cap[i]}</div>
-        </div>`;
-      }).join('')}
+    <div class="grid grid-cols-3 gap-2.5 mt-4">${[0, 1, 2].map(i => `<div class="rounded-2xl py-3 text-center" style="${i === idx ? 'background:#f5f3ff;border:1.5px solid #7c3aed' : 'background:#fff;border:1.5px solid #eef0f6'}">
+      <div class="flex items-center justify-center gap-1 text-xs font-bold text-slate-500">${hd[i]}${i === idx ? '<span class="text-[9px] font-extrabold text-white px-1.5 py-0.5 rounded" style="background:#6d28d9">SHORTEST</span>' : ''}</div>
+      <div class="font-display font-bold text-xl mt-0.5">${a.odds[i].toFixed(2)}</div><div class="text-[11px] text-slate-400">${cap[i]}</div></div>`).join('')}</div>
+    <div class="flex h-1.5 rounded-full overflow-hidden mt-4" style="gap:2px">${a.p.map((v, i) => `<span style="flex:${v};background:${seg[i]}"></span>`).join('')}</div>
+    <div class="flex justify-between text-[11px] font-bold mt-1.5">${a.p.map((v, i) => `<span style="color:${txt[i]}">${hd[i]} (${cap[i]}): ${v.toFixed(0)}%</span>`).join('')}</div>
+    <div class="rounded-2xl mt-4 p-3.5 flex items-center gap-3 text-white" style="background:linear-gradient(135deg,#6d28d9,#4c1d95)">
+      <div class="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center flex-none">${ic('trending-down', 'i-lg')}</div>
+      <div class="flex-1 min-w-0"><div class="text-[10px] font-extrabold tracking-wider text-purple-200">SHORTEST PRICE</div><div class="font-display font-extrabold text-lg leading-tight">${names[idx]}</div></div>
+      <span class="text-xs font-bold rounded-lg px-2.5 py-1.5 bg-white/15 whitespace-nowrap">${chip}</span>
     </div>
-
-    <div class="flex h-1.5 rounded-full overflow-hidden mt-4" style="gap:2px">
-      ${a.p.map((v, i) => `<span style="flex:${v};background:${seg[i]}"></span>`).join('')}
-    </div>
-    <div class="flex justify-between text-[11px] font-bold mt-1.5">
-      ${a.p.map((v, i) => `<span style="color:${txt[i]}">${hd[i]} (${cap[i]}): ${v.toFixed(0)}%</span>`).join('')}
-    </div>
-
-    <div class="rounded-2xl mt-4 p-3.5 flex items-center gap-3 text-white" style="background:${themeBg}">
-      <div class="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center flex-none">${ic('sparkles', 'i-lg')}</div>
-      <div class="flex-1 min-w-0">
-        <div class="text-[10px] font-extrabold tracking-wider opacity-90 flex items-center gap-1">${ic('percent', '!w-3 !h-3')} PREDICTED OUTCOME</div>
-        <div class="font-display font-extrabold text-lg leading-tight">${an.predicted_outcome}</div>
-      </div>
-      <span class="text-xs font-bold rounded-lg px-2.5 py-1.5 bg-white/15 whitespace-nowrap">${ouBadge}</span>
-    </div>
-    
-    ${detailed ? `<div class="mt-3 text-sm text-[var(--mute)] flex flex-wrap gap-x-4 gap-y-1"><span>Bookmaker margin: <b class="text-slate-800">${a.margin.toFixed(1)}%</b></span><span>Spread: <b class="text-slate-800">${an.spread}</b></span></div>` : ''}
+    <div class="mt-3 text-[13px] text-[var(--mute)] flex flex-wrap gap-x-4 gap-y-1"><span>${shape}</span><span>Fair odds <b class="text-slate-800">${fair}</b></span></div>
+    ${detailed ? `<div class="mt-2 text-sm text-[var(--mute)] flex flex-wrap gap-x-4 gap-y-1"><span>Bookmaker margin <b class="text-slate-800">${a.margin.toFixed(1)}%</b></span>${a.ou ? `<span>Over ${a.ou.line}: <b class="text-slate-800">${a.ou.over.toFixed(1)}%</b></span><span>Under ${a.ou.line}: <b class="text-slate-800">${a.ou.under.toFixed(1)}%</b></span>` : ''}</div>` : ''}
   </div>`;
+}
+
+function readingText() {
+  const records = P.result || P.matches || [];
+  if (!Array.isArray(records) || records.length === 0) return `${BRAND} reading ${P.reference || ''}\nNo matches found.`;
+  
+  const lines = records.map(m => {
+    const an = m.analysis; 
+    if (!an) return '';
+    const o = [m.odds.home, m.odds.draw, m.odds.away].map(x => Number(x).toFixed(2)).join(' / ');
+    const pickName = an.pick ? an.pick.toUpperCase() : (an.fav ? an.fav.toUpperCase() : 'HOME');
+    const leagueStr = m.league ? ` (${m.league})` : '';
+    return `${m.match_no}) ${m.home} vs ${m.away}${leagueStr}  1X2: ${o}  implied: ${an.p.map(v => v.toFixed(0) + '%').join(' / ')}  pick: ${pickName}`;
+  }).filter(Boolean);
+
+  return `${BRAND} reading ${P.reference || 'VOP'}\n${lines.join('\n')}\nThese figures describe the odds, not the result.`;
+}
+
+async function copyToClipboard(text) {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (err) {}
+  
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.top = '0';
+    ta.style.left = '0';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const successful = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return successful;
+  } catch (e) {
+    return false;
+  }
 }
 
 V.predict = u => {
@@ -928,8 +932,6 @@ V.report = u => {
   </div><div class="h-32"></div>`;
 };
 
-/* Sends a ticket or feedback to the developer's email through a form handler (Formspree-style endpoint).
-   If CONFIG.FORM_ENDPOINT is empty it falls back to opening the user's email app. */
 async function sendToDeveloper(payload) {
   const me = state.me || {};
   const data = {
@@ -952,7 +954,7 @@ V.profile = u => {
   return `${pageTitle('Profile')}
   <div class="wrap mt-4">
     <div class="card p-5">
-      <div class="flex items-center gap-4"><div class="w-16 h-16 rounded-full grad text-white flex items-center justify-center font-display font-bold text-2xl">${esc((u.first_name[0] || '') + (u.last_name[0] || ''))}</div>
+      <div class="flex items-center gap-4"><div class="w-16 h-16 rounded-full grad text-white flex items-center justify-center font-display font-bold text-2xl">${esc((u.first_name[0] || '') + (u.last_name[0] || '))}</div>
         <div><div class="font-display font-bold text-xl">${esc([u.first_name, u.other_name, u.last_name].filter(Boolean).join(' '))}</div><span class="chip text-xs !bg-emerald-50 !text-emerald-700 !border-emerald-200">${ic('badge-check')} Active License Member</span></div></div>
       <dl class="mt-4 text-sm space-y-2.5">
         <div class="flex justify-between"><dt class="text-[var(--mute)]">Email</dt><dd class="font-semibold">${esc(u.email)}</dd></div>
@@ -977,12 +979,6 @@ V.profile = u => {
 };
 
 /* =========================================================
-   Router
-   ========================================================= */
-/* =========================================================
-   Paystack checkout + live wallet updates
-   ========================================================= */
-/* =========================================================
    Popups and Paystack checkout
    ========================================================= */
 
@@ -1001,9 +997,8 @@ function popup({ icon = 'circle-check', tone = 'green', title, text, button = 'C
   });
 }
 
-/* Returns 'successful' | 'failed' | 'canceled' | 'pending'. Callers decide what to show. */
 async function confirmPayment(ref) {
-  for (let i = 0; i < 24; i++) { // MoMo approvals can take a minute
+  for (let i = 0; i < 24; i++) {
     const r = await callFn('paystack-verify', { reference: ref });
     if (r.status === 'successful') return 'successful';
     if (r.status === 'failed') return 'failed';
@@ -1022,15 +1017,13 @@ async function pay(payload) {
     });
   });
   if (outcome === 'cancel') {
-    // Closing the pop-up marks the transaction Canceled (unless Paystack says it was actually paid).
     try { const r = await callFn('paystack-verify', { reference: init.reference, cancel: true }); return r.status === 'successful' ? 'successful' : 'canceled'; }
     catch { return 'canceled'; }
   }
   toast('Confirming your payment...');
   return confirmPayment(init.reference);
 }
-/* Self-healing: asks the server to re-check recent unpaid-looking payments with Paystack and credit any that
-   actually succeeded (covers slow MoMo approvals and a missed webhook). Safe to run repeatedly. */
+
 let reconAt = 0;
 async function reconcilePayments(force) {
   if (!force && Date.now() - reconAt < 45000) return 0;
@@ -1188,7 +1181,6 @@ document.addEventListener('click', async e => {
       } finally { b.disabled = false; }
     }); break;
     case 'logout': Auth.logout(); break;
-    /* predictions flow */
     case 'ptab': P.kind = v; render(); break;
     case 'pickTier': P.tier = TIERS[P.kind].find(t => t.id === b.dataset.id); P.step = 'upload'; P.error = ''; render(); break;
     case 'changetier': P.step = 'tiers'; render(); break;
