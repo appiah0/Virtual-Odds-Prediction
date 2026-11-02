@@ -662,7 +662,9 @@ function tierRow(t, kind) {
 }
 
 function readingText() {
-  const lines = P.result.map(m => {
+  const matchesArr = P.result || P.matches;
+  if (!matchesArr || !Array.isArray(matchesArr)) return '';
+  const lines = matchesArr.map(m => {
     const an = m.analysis; if (!an) return '';
     const o = [m.odds.home, m.odds.draw, m.odds.away].map(x => Number(x).toFixed(2)).join(' / ');
     const pickName = an.pick ? an.pick.toUpperCase() : 'HOME';
