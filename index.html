@@ -665,39 +665,58 @@ function matchCard(m, detailed) {
   const an = m.analysis;
   if (!an) return '';
   const a = { odds: [m.odds.home, m.odds.draw, m.odds.away].map(Number), p: an.p, margin: an.margin, ou: an.ou };
+  const keys = ['home', 'draw', 'away'];
+  const pickIdx = keys.indexOf(an.pick); // 0 for home, 1 for draw, 2 for away
   const cap = ['Home', 'Draw', 'Away'], hd = ['1', 'X', '2'];
   const seg = ['#22c55e', '#f59e0b', '#6d28d9'], txt = ['#16a34a', '#d97706', '#6d28d9'];
-  const chip = a.ou
-    ? (a.ou.over >= a.ou.under ? `Over ${a.ou.line} &middot; ${a.ou.over.toFixed(0)}%` : `Under ${a.ou.line} &middot; ${a.ou.under.toFixed(0)}%`)
-    : `Margin ${a.margin.toFixed(1)}%`;
+  
   const team = (t, full) => `<div class="text-center min-w-[84px] max-w-[110px]"><div class="rounded-2xl px-3 py-3 font-display font-bold text-xl bg-slate-50" style="border:1.5px solid #eef0f6">${esc(t)}</div>${full ? `<div class="text-[11px] text-slate-500 mt-1 leading-tight">${esc(full)}</div>` : ''}</div>`;
   const leagueName = m.league ? (/league|cup|champions|euro/i.test(m.league) ? m.league : m.league + ' Virtual League') : 'Virtual football';
-  const shape = an.spread;
-  const fair = an.fair.map(v => Number(v).toFixed(2)).join(' / ');
   
-  return `<div class="rounded-[22px] p-4 bg-white" style="border:1.5px solid #e6e8f2;border-left:4px solid #6d28d9;box-shadow:0 12px 26px -20px rgba(15,18,38,.45)">
+  const ouBadge = a.ou ? `Under ${a.ou.line} Goals` : `Margin ${a.margin.toFixed(1)}%`;
+
+  return `<div class="rounded-[22px] p-4 bg-white" style="border:1.5px solid #e6e8f2;border-left:4px solid #10b981;box-shadow:0 12px 26px -20px rgba(15,18,38,.45)">
     <div class="flex items-center gap-2">
       <div class="flex items-center gap-1.5 text-sm font-bold text-slate-700 flex-1 min-w-0"><span class="text-purple-700 flex-none">${ic('trophy', '!w-4 !h-4')}</span><span class="truncate">${esc(leagueName)}</span></div>
       <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg whitespace-nowrap" style="background:#ede9fe;color:#5b21b6">Match ${m.match_no}</span>
-      <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 whitespace-nowrap" style="background:#dcfce7;color:#166534">${ic('chart-pie', '!w-3.5 !h-3.5')} Margin ${a.margin.toFixed(1)}%</span>
+      <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 whitespace-nowrap" style="background:#dcfce7;color:#15803d">${ic('check-circle', '!w-3.5 !h-3.5')} ${an.confidence}% Confidence</span>
     </div>
+    
     <div class="flex items-center justify-between mt-4">
       ${team(m.home, m.home_full)}
       <div class="text-center"><div class="w-9 h-9 rounded-full bg-slate-900 text-white text-xs font-bold flex items-center justify-center mx-auto">VS</div><div class="text-[10px] font-extrabold tracking-wider text-purple-700 mt-1">1X2</div></div>
       ${team(m.away, m.away_full)}
     </div>
-    <div class="grid grid-cols-3 gap-2.5 mt-4">${[0, 1, 2].map(i => `<div class="rounded-2xl py-3 text-center bg-white" style="border:1.5px solid #eef0f6">
-      <div class="flex items-center justify-center gap-1 text-xs font-bold text-slate-500">${hd[i]}</div>
-      <div class="font-display font-bold text-xl mt-0.5">${a.odds[i].toFixed(2)}</div><div class="text-[11px] text-slate-400">${cap[i]}</div></div>`).join('')}</div>
-    <div class="flex h-1.5 rounded-full overflow-hidden mt-4" style="gap:2px">${a.p.map((v, i) => `<span style="flex:${v};background:${seg[i]}"></span>`).join('')}</div>
-    <div class="flex justify-between text-[11px] font-bold mt-1.5">${a.p.map((v, i) => `<span style="color:${txt[i]}">${hd[i]} (${cap[i]}): ${v.toFixed(0)}%</span>`).join('')}</div>
-    <div class="rounded-2xl mt-4 p-3.5 flex items-center gap-3 text-white" style="background:linear-gradient(135deg,#312e81,#1e1b4b)">
-      <div class="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center flex-none">${ic('scale', 'i-lg')}</div>
-      <div class="flex-1 min-w-0"><div class="text-[10px] font-extrabold tracking-wider text-purple-200">MARKET SPREAD</div><div class="font-display font-extrabold text-lg leading-tight">${shape}</div></div>
-      <span class="text-xs font-bold rounded-lg px-2.5 py-1.5 bg-white/15 whitespace-nowrap">${chip}</span>
+
+    <div class="grid grid-cols-3 gap-2.5 mt-4">
+      ${[0, 1, 2].map(i => {
+        const isPick = i === pickIdx;
+        return `<div class="rounded-2xl py-3 text-center relative" style="${isPick ? 'background:#ecfdf5;border:2px solid #10b981;box-shadow:0 4px 12px rgba(16,185,129,0.15)' : 'background:#fff;border:1.5px solid #eef0f6'}">
+          ${isPick ? '<span class="absolute -top-3 left-1/2 -translate-x-1/2 text-[9px] font-extrabold text-white px-2 py-0.5 rounded-full uppercase tracking-wider" style="background:#10b981">1 ✓ PICK</span>' : ''}
+          <div class="flex items-center justify-center gap-1 text-xs font-bold text-slate-500">${hd[i]}</div>
+          <div class="font-display font-bold text-xl mt-0.5">${a.odds[i].toFixed(2)}</div>
+          <div class="text-[11px] text-slate-400">${cap[i]}</div>
+        </div>`;
+      }).join('')}
     </div>
-    <div class="mt-3 text-[13px] text-[var(--mute)] flex flex-wrap gap-x-4 gap-y-1"><span>Fair odds (no margin): <b class="text-slate-800">${fair}</b></span></div>
-    ${detailed ? `<div class="mt-2 text-sm text-[var(--mute)] flex flex-wrap gap-x-4 gap-y-1"><span>Bookmaker margin: <b class="text-slate-800">${a.margin.toFixed(1)}%</b></span>${a.ou ? `<span>Over ${a.ou.line}: <b class="text-slate-800">${a.ou.over.toFixed(1)}%</b></span><span>Under ${a.ou.line}: <b class="text-slate-800">${a.ou.under.toFixed(1)}%</b></span>` : ''}</div>` : ''}
+
+    <div class="flex h-1.5 rounded-full overflow-hidden mt-4" style="gap:2px">
+      ${a.p.map((v, i) => `<span style="flex:${v};background:${seg[i]}"></span>`).join('')}
+    </div>
+    <div class="flex justify-between text-[11px] font-bold mt-1.5">
+      ${a.p.map((v, i) => `<span style="color:${txt[i]}">${hd[i]} (${cap[i]}): ${v.toFixed(0)}%</span>`).join('')}
+    </div>
+
+    <div class="rounded-2xl mt-4 p-3.5 flex items-center gap-3 text-white" style="background:linear-gradient(135deg,#059669,#047857)">
+      <div class="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center flex-none">${ic('sparkles', 'i-lg')}</div>
+      <div class="flex-1 min-w-0">
+        <div class="text-[10px] font-extrabold tracking-wider text-emerald-200 flex items-center gap-1">${ic('percent', '!w-3 !h-3')} PREDICTED OUTCOME</div>
+        <div class="font-display font-extrabold text-lg leading-tight">${an.predicted_outcome}</div>
+      </div>
+      <span class="text-xs font-bold rounded-lg px-2.5 py-1.5 bg-white/15 whitespace-nowrap">${ouBadge}</span>
+    </div>
+    
+    ${detailed ? `<div class="mt-3 text-sm text-[var(--mute)] flex flex-wrap gap-x-4 gap-y-1"><span>Bookmaker margin: <b class="text-slate-800">${a.margin.toFixed(1)}%</b></span><span>Spread: <b class="text-slate-800">${an.spread}</b></span></div>` : ''}
   </div>`;
 }
 
