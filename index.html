@@ -113,7 +113,7 @@ const TIERS = {
   /* Static stats on the dashboard. Edit by hand. */
 const STATS = {
   readings: '94.5%',            // EDIT
-  topped:   'GH\u20B5 GH₵ 250K+',  // EDIT
+  topped:   'GH\u20B5 250K+',  // EDIT
   members:  '15,000+'               // EDIT
 };
 const COIN_PACKS = [
@@ -325,8 +325,8 @@ function aboutBlock() {
   <section class="wrap mt-6">
     <div class="dark-card p-5 grid grid-cols-3 text-center gap-2">
       <div><div class="font-display font-bold text-2xl text-purple-300">15000+</div><div class="text-xs text-slate-400 mt-1">Active Members</div></div>
-      <div><div class="font-display font-bold text-2xl text-emerald-300">94.6%</div><div class="text-xs text-slate-400 mt-1">Win Rate</div></div>
-      <div><div class="font-display font-bold text-2xl text-amber-300">GH₵250k+</div><div class="text-xs text-slate-400 mt-1">Total Won</div></div>
+      <div><div class="font-display font-bold text-2xl text-emerald-300">94.5%</div><div class="text-xs text-slate-400 mt-1">Win Rate</div></div>
+      <div><div class="font-display font-bold text-2xl text-amber-300">GH₵ 250k+</div><div class="text-xs text-slate-400 mt-1">Total Won</div></div>
     </div>
     <div class="mt-4 space-y-3">
       ${[['brain', '#f5f3ff', '#7c3aed', 'Neural Prediction Engine', 'Analyzes live virtual round fixtures against a database of historical Monte Carlo simulations in seconds.'],
@@ -818,9 +818,7 @@ V.predict = u => {
         <button data-action="ptab" data-v="diamonds" class="btn !py-2.5 text-sm ${P.kind === 'diamonds' ? '!bg-white shadow' : '!bg-transparent text-slate-500'}">${ic('gem', 'text-purple-600')} VIP Diamonds</button>
       </div>
       <div class="mt-5 space-y-4">${TIERS[P.kind].map(t => tierRow(t, P.kind)).join('')}</div></div>
-      <div class="wrap mt-6">${lobbyBanner()}</div>
-      <div class="wrap mt-4"><div class="rounded-2xl p-4" style="background:#fffbeb;border:1.5px solid #fde68a;border-left:5px solid #f59e0b">
-        </div></div>`;
+      <div class="wrap mt-6">${lobbyBanner()}</div>`;
   } else if (P.step === 'scanning') {
     body = `<div class="wrap mt-6">
       <div class="rounded-[24px] p-3" style="border:2px dashed #c4b5fd;background:#faf5ff">
