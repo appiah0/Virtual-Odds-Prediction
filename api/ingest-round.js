@@ -14,12 +14,14 @@ export default async function handler(req, res) {
 
   const { image, secret } = req.body;
 
+  // 1. Verify developer passkey first
   if (!secret || secret !== ADMIN_SECRET) {
     return res.status(401).json({ error: 'Unauthorized: Invalid passkey' });
   }
 
+  // If no image is provided, this is just a secure passkey check from the login screen
   if (!image) {
-    return res.status(400).json({ error: 'Image data missing' });
+    return res.status(200).json({ success: true, verified: true });
   }
 
   try {
