@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Round upload</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+body{font-family:'Plus Jakarta Sans',sans-serif;background:#faf5ff;color:#0f1226}
+.h{font-family:'Outfit',sans-serif}
+.card{background:#fff;border:1.5px solid #e6e8f2;border-radius:20px;padding:18px}
+.input{width:100%;border:1.5px solid #e6e8f2;border-radius:14px;padding:12px 14px;font-size:15px;background:#fff;outline:none}
+.input:focus{border-color:#7c3aed;box-shadow:0 0 0 4px rgba(124,58,237,.12)}
+.btn{display:inline-flex;align-items:center;justify-content:center;font-family:'Outfit',sans-serif;font-weight:700;border-radius:999px;padding:14px 22px;color:#fff;background:linear-gradient(135deg,#a855f7,#7c3aed);width:100%}
+.btn:disabled{opacity:.5}
+.drop{border:2px dashed #c4b5fd;border-radius:16px;background:#faf5ff;padding:14px;text-align:center;font-size:14px;color:#6b7280}
+th,td{padding:6px 8px;text-align:right;font-size:13px;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+</style>
+</head>
+<body>
+<div class="max-w-[480px] mx-auto p-5 pb-16" id="app"></div>
+<script>
+const CFG = window.CONFIG;
+const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, flowType: 'pkce' } });
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const S = { oddsUrl: null, resUrl: null, busy: false, out: null, err: '', stats: null, league: 'Germany' };
+
+async function shrink(file) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.88);
+}
+async function callFn(body) {
+  const { data } = await sb.auth.getSession();
+  if (!data.session) throw 'Please sign in.';
+  const res = await fetch(`${CFG.SUPABASE_URL}/functions/v1/ingest-round`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', apikey: CFG.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + data.session.access_token },
+    body: JSON.stringify(body)
+  });
+  let j = {}; try { j = await res.json(); } catch {}
+  if (!res.ok) throw j.error || ('Request failed (' + res.status + ').');
+  return j;
+}
+
+function loginView() {
+  return `<h1 class="h text-2xl font-bold">Round upload</h1><p class="text-sm text-gray-500 mt-1">Developer sign-in</p>
+  <div class="card mt-4 space-y-3">
+    <input id="em" class="input" type="email" placeholder="Email" autocomplete="username">
+    <input id="pw" class="input" type="password" placeholder="Password" autocomplete="current-password">
+    ${S.err ? `<p class="text-sm font-semibold text-red-600">${esc(S.err)}</p>` : ''}
+    <button class="btn" data-a="login">Sign in</button></div>`;
+}
+function previewBox(id, label, url) {
+  return `<label class="drop block cursor-pointer" for="${id}">${url ? `<img src="${url}" alt="" class="mx-auto rounded-xl" style="max-height:200px">` : label}
+    <input id="${id}" type="file" accept="image/png,image/jpeg,image/webp" class="hidden"></label>`;
+}
+function statsTable() {
+  const s = S.stats; if (!s) return '';
+  return `<div class="card mt-4"><div class="h font-bold">Stored so far</div>
+    <p class="text-sm text-gray-500 mt-1">${s.rounds} rounds, ${s.fixtures} fixtures</p>
+    ${s.teams.length ? `<div class="overflow-x-auto mt-3"><table class="w-full"><thead><tr class="text-gray-500"><th>Team</th><th>Fix</th><th>Fav</th><th>Fav won</th><th>Drew</th><th>Lost</th></tr></thead><tbody>
+      ${s.teams.map((t) => `<tr class="border-t border-gray-100"><td class="font-semibold">${esc(t.team)}</td><td>${t.fixtures}</td><td>${t.times_favourite}</td><td>${t.favourite_won}</td><td>${t.favourite_drew}</td><td>${t.favourite_lost}</td></tr>`).join('')}
+    </tbody></table></div>` : '<p class="text-sm text-gray-500 mt-2">No fixtures stored yet.</p>'}</div>`;
+}
+function mainView() {
+  const o = S.out;
+  return `<div class="flex items-center justify-between"><h1 class="h text-2xl font-bold">Round upload</h1><button class="text-sm font-bold text-gray-500 underline" data-a="out">Sign out</button></div>
+  <p class="text-sm text-gray-500 mt-1">One odds screenshot (1X2 tab) and one results screenshot for the same league and round.</p>
+  <div class="card mt-4 space-y-3">
+    <label class="text-sm font-bold" for="lg">League</label>
+    <select id="lg" class="input"><option ${S.league === 'Germany' ? 'selected' : ''}>Germany</option><option ${S.league === 'Spain' ? 'selected' : ''}>Spain</option></select>
+    <div class="text-sm font-bold">Odds screen</div>${previewBox('fo', 'Tap to choose the odds screenshot', S.oddsUrl)}
+    <div class="text-sm font-bold">Results screen</div>${previewBox('fr', 'Tap to choose the results screenshot', S.resUrl)}
+    ${S.err ? `<p class="text-sm font-semibold text-red-600">${esc(S.err)}</p>` : ''}
+    <button class="btn" data-a="go" ${S.busy || !S.oddsUrl || !S.resUrl ? 'disabled' : ''}>${S.busy ? 'Reading...' : 'Read and store round'}</button>
+  </div>
+  ${o ? `<div class="card mt-4"><div class="h font-bold text-emerald-700">Stored</div>
+    <p class="text-sm mt-1">${esc(o.league)}: ${o.stored} fixtures stored (${o.odds_read} odds rows and ${o.results_read} result rows read${o.duplicates ? ', ' + o.duplicates + ' already stored' : ''}).</p>
+    ${o.unmatched_odds.length ? `<p class="text-sm mt-2 text-amber-700">Odds without a result: ${esc(o.unmatched_odds.join(', '))}</p>` : ''}
+    ${o.unmatched_results.length ? `<p class="text-sm mt-1 text-amber-700">Results without odds: ${esc(o.unmatched_results.join(', '))}</p>` : ''}</div>` : ''}
+  ${statsTable()}
+  <button class="mt-4 text-sm font-bold text-purple-700 underline" data-a="stats">Refresh stats</button>`;
+}
+async function render() {
+  const { data } = await sb.auth.getSession();
+  $('#app').innerHTML = data.session ? mainView() : loginView();
+}
+async function loadStats() {
+  try { S.stats = await callFn({ action: 'stats' }); S.err = ''; } catch (e) { S.err = String(e); }
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-a]'); if (!b) return;
+  const a = b.dataset.a;
+  if (a === 'login') {
+    const { error } = await sb.auth.signInWithPassword({ email: $('#em').value.trim().toLowerCase(), password: $('#pw').value });
+    S.err = error ? 'Incorrect email or password.' : ''; if (!error) await loadStats(); render();
+  } else if (a === 'out') { await sb.auth.signOut(); S.stats = null; S.out = null; render(); }
+  else if (a === 'stats') { await loadStats(); render(); }
+  else if (a === 'go') {
+    S.busy = true; S.err = ''; S.out = null; S.league = $('#lg').value; render();
+    try {
+      S.out = await callFn({ action: 'ingest', league: S.league, odds_image: S.oddsUrl.split(',')[1], results_image: S.resUrl.split(',')[1] });
+      S.oddsUrl = null; S.resUrl = null; await loadStats();
+    } catch (er) { S.err = String(er); }
+    S.busy = false; render();
+  }
+});
+document.addEventListener('change', async (e) => {
+  if (e.target.id === 'fo' || e.target.id === 'fr') {
+    const f = e.target.files[0]; if (!f) return;
+    S.league = $('#lg') ? $('#lg').value : S.league;
+    try { const u = await shrink(f); if (e.target.id === 'fo') S.oddsUrl = u; else S.resUrl = u; S.err = ''; } catch { S.err = 'Could not open that image.'; }
+    render();
+  }
+});
+(async () => { const { data } = await sb.auth.getSession(); if (data.session) await loadStats(); render(); })();
+</script>
+</body>
+</html>
