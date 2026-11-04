@@ -10,7 +10,8 @@
     <div id="auth-box" class="w-full max-w-sm bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-xl">
         <h2 class="text-xl font-bold mb-4 text-emerald-400">Developer Access</h2>
         <input type="password" id="passkey" placeholder="Enter Secret Passkey" class="w-full bg-slate-800 border border-slate-700 rounded p-3 mb-4 text-sm focus:outline-none focus:border-emerald-500">
-        <button onclick="authenticate()" class="w-full bg-emerald-600 hover:bg-emerald-500 font-semibold p-3 rounded text-sm transition">Authenticate</button>
+        <button onclick="authenticate()" id="auth-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 font-semibold p-3 rounded text-sm transition">Authenticate</button>
+        <p id="auth-status" class="text-xs text-center mt-3 text-red-400"></p>
     </div>
 
     <div id="upload-box" class="w-full max-w-sm bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-xl hidden">
@@ -26,12 +27,37 @@
     <script>
         let secretKey = '';
 
-        function authenticate() {
+        async function authenticate() {
             const val = document.getElementById('passkey').value;
-            if (val.trim().length > 0) {
-                secretKey = val;
-                document.getElementById('auth-box').classList.add('hidden');
-                document.getElementById('upload-box').classList.remove('hidden');
+            const status = document.getElementById('auth-status');
+            const btn = document.getElementById('auth-btn');
+
+            if (!val.trim()) {
+                status.innerText = 'Please enter a passkey.';
+                return;
+            }
+
+            status.innerText = 'Verifying...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/ingest-round', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ secret: val })
+                });
+
+                if (response.ok) {
+                    secretKey = val;
+                    document.getElementById('auth-box').classList.add('hidden');
+                    document.getElementById('upload-box').classList.remove('hidden');
+                } else {
+                    status.innerText = 'Invalid passkey. Access denied.';
+                }
+            } catch (err) {
+                status.innerText = 'Network connection error.';
+            } finally {
+                btn.disabled = false;
             }
         }
 
@@ -45,7 +71,7 @@
                 return;
             }
 
-            status.innerText = 'Processing and extracting data via AI...';
+            status.innerText = 'Processing via Haiku 5.5...';
             btn.disabled = true;
 
             const reader = new FileReader();
