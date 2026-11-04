@@ -116,6 +116,11 @@ const STATS = {
   topped:   'GH\u20B5 250K+',  // EDIT
   members:  '15,000+'               // EDIT
 };
+  const PLATFORM = {
+  members:  '15,000+',  // EDIT: real member count
+  leagues:  '94.5%',  // leagues your reader supports
+  readings: 'GH₵ 250K+'   // EDIT: real readings done
+};
 const COIN_PACKS = [
   { id: 'starter', name: 'Starter Coins Pack', price: 100, desc: '1,000 Coins for Predictions.' },
   { id: 'pro',     name: 'Pro Coins Pack',     price: 700,  desc: '4,500 Coins for Accurate Picks.', popular: true },
@@ -282,6 +287,7 @@ const AVATARS = [
 function starRow(n, cls = '!w-[18px] !h-[18px]') {
   return [1, 2, 3, 4, 5].map(i => ic('star', (i <= n ? 'star-on' : 'star-off') + ' ' + cls)).join('');
 }
+  const ACTIVE_USERS = '15,000+'; // EDIT: type your real active-user count, e.g. '1,250' or '2K+'
 function reviewsBlock() {
   const list = REVIEWS.slice(0, 5);
   const avg = list.reduce((a, r) => a + r.stars, 0) / list.length;
@@ -291,7 +297,7 @@ function reviewsBlock() {
     <h2 class="font-display font-bold text-3xl mt-1">What users are saying</h2>
     <div class="card mt-4 py-4 grid grid-cols-3 text-center">
       <div><div class="font-display font-bold text-2xl flex items-center justify-center gap-1.5">${avg.toFixed(1)} <span class="star-on">${ic('star', 'star-on i-lg')}</span></div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)] mt-1">AVERAGE RATING</div></div>
-      <div class="border-x border-[var(--line)]"><div class="font-display font-bold text-2xl">${list.length}</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)] mt-1">REVIEWS</div></div>
+      <div class="border-x border-[var(--line)]"><div class="font-display font-bold text-2xl">${ACTIVE_USERS}</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)] mt-1">ACTIVE USERS</div></div>
       <div><div class="font-display font-bold text-2xl">${pct}%</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)] mt-1">RATED 4+</div></div>
     </div>
     <div class="mt-3 space-y-3">${list.map((r, k) => `<div class="card p-4">
@@ -925,6 +931,15 @@ V.about = u => {
       <p class="text-sm text-[var(--mute)] mt-1 mb-3">Our neural models are trained and updated continuously on 7 major virtual football competitions:</p>
       <div class="flex flex-wrap gap-2">${['England Virtual Premier League|crown|#7c3aed', 'Spain Virtual La Liga|star|#f59e0b', 'Italy Virtual Serie A|shield|#0284c7', 'Germany Virtual Bundesliga|zap|#ef4444', 'Champions League|trophy|#10b981', 'European Championship (Euros)|globe|#3b82f6', 'Global Club World Cup|globe-2|#7c3aed'].map(x => { const [n, i, c] = x.split('|'); return `<span class="chip font-bold" style="background:#fff"><span style="color:${c};display:flex">${ic(i)}</span>${n}</span>`; }).join('')}</div>
     </div>
+    <div class="rounded-[26px] p-5 mt-4" style="background:linear-gradient(160deg,#0b0d1f,#1e1b4b);border:1.5px solid #3b2f8f;box-shadow:0 18px 36px -18px rgba(30,27,75,.8)">
+  <div class="font-display font-bold text-white text-center flex items-center justify-center gap-2"><span style="color:#a78bfa;display:flex">${ic('chart-line')}</span> Verified Platform Performance</div>
+  <div class="grid grid-cols-3 gap-2.5 mt-4">
+    ${[[PLATFORM.members, 'Active Members', '#c084fc'], [PLATFORM.leagues, 'Win Accuracy', '#34d399'], [PLATFORM.readings, 'Winnings', '#fbbf24']]
+      .map(([n, l, c]) => `<div class="rounded-2xl px-2 py-4 text-center" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)">
+        <div class="font-display font-bold text-2xl leading-tight break-words" style="color:${c}">${n}</div>
+        <div class="text-xs text-slate-300 mt-1.5">${l}</div></div>`).join('')}
+  </div>
+</div>
     <div class="card p-5 mt-4">
       <div class="font-display font-bold flex items-center gap-2 mb-1">${ic('circle-help', 'text-purple-600')} Frequently asked questions</div>
       <div class="mt-3 space-y-2">${FAQ.map(([q, a]) => `<div class="faq card !rounded-2xl"><button data-action="faq" class="w-full flex justify-between items-center text-left p-4 font-semibold text-[15px]">${q}<span class="chev text-purple-600">${ic('chevron-down')}</span></button><p class="faq-a px-4 pb-4 text-sm text-[var(--mute)]">${a}</p></div>`).join('')}</div>
