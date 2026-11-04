@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Round Ingestion</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-center p-4">
+    <div id="auth-box" class="w-full max-w-sm bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-xl">
+        <h2 class="text-xl font-bold mb-4 text-emerald-400">Developer Access</h2>
+        <input type="password" id="passkey" placeholder="Enter Secret Passkey" class="w-full bg-slate-800 border border-slate-700 rounded p-3 mb-4 text-sm focus:outline-none focus:border-emerald-500">
+        <button onclick="authenticate()" class="w-full bg-emerald-600 hover:bg-emerald-500 font-semibold p-3 rounded text-sm transition">Authenticate</button>
+    </div>
+
+    <div id="upload-box" class="w-full max-w-sm bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-xl hidden">
+        <h2 class="text-xl font-bold mb-2 text-emerald-400">Upload Round Screenshot</h2>
+        <p class="text-xs text-slate-400 mb-4">Target Leagues: Spain & Germany</p>
+        
+        <input type="file" id="screenshot" accept="image/*" class="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 mb-4">
+        
+        <button onclick="uploadImage()" id="upload-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 font-semibold p-3 rounded text-sm transition">Process & Ingest</button>
+        <p id="status" class="text-xs text-center mt-4 text-slate-400"></p>
+    </div>
+
+    <script>
+        let secretKey = '';
+
+        function authenticate() {
+            const val = document.getElementById('passkey').value;
+            if (val.trim().length > 0) {
+                secretKey = val;
+                document.getElementById('auth-box').classList.add('hidden');
+                document.getElementById('upload-box').classList.remove('hidden');
+            }
+        }
+
+        async function uploadImage() {
+            const fileInput = document.getElementById('screenshot');
+            const status = document.getElementById('status');
+            const btn = document.getElementById('upload-btn');
+
+            if (!fileInput.files[0]) {
+                status.innerText = 'Please select a screenshot first.';
+                return;
+            }
+
+            status.innerText = 'Processing and extracting data via AI...';
+            btn.disabled = true;
+
+            const reader = new FileReader();
+            reader.onload = async function() {
+                const base64Image = reader.result;
+
+                try {
+                    const response = await fetch('/api/ingest-round', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image: base64Image, secret: secretKey })
+                    });
+
+                    const data = await response.json();
+                    if (response.ok) {
+                        status.innerText = `Success! Imported ${data.imported} matches.`;
+                        fileInput.value = '';
+                    } else {
+                        status.innerText = `Error: ${data.error || 'Failed to process.'}`;
+                    }
+                } catch (err) {
+                    status.innerText = 'Network error occurred.';
+                } finally {
+                    btn.disabled = false;
+                }
+            };
+            reader.readAsDataURL(fileInput.files[0]);
+        }
+    </script>
+</body>
+</html>
