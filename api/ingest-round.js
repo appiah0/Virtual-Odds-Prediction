@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase admin client
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -15,7 +14,6 @@ export default async function handler(req, res) {
 
   const { image, secret } = req.body;
 
-  // 1. Verify developer passkey
   if (!secret || secret !== ADMIN_SECRET) {
     return res.status(401).json({ error: 'Unauthorized: Invalid passkey' });
   }
@@ -25,7 +23,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 2. Call Vision AI to parse Spain & Germany matches from the screenshot
     const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -34,7 +31,7 @@ export default async function handler(req, res) {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-haiku-5-5',
         max_tokens: 2000,
         messages: [
           {
@@ -72,7 +69,6 @@ export default async function handler(req, res) {
       return res.status(422).json({ error: 'No Spain or Germany matches found in image.' });
     }
 
-    // 3. Insert matches into Supabase database
     for (const m of matches) {
       const hGoals = Number(m.home_goals);
       const aGoals = Number(m.away_goals);
