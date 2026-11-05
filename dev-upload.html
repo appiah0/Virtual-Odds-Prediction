@@ -33,19 +33,20 @@ const S = { h2hUrls: [], h2h: null, oddsUrl: null, resUrl: null, busy: false, ou
 
 async function shrink(file) {
   const bmp = await createImageBitmap(file);
-  const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+  const scale = Math.min(1, 1400 / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas'); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
   c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-  return c.toDataURL('image/jpeg', 0.88);
+  return c.toDataURL('image/jpeg', 0.8);
 }
 async function callFn(body) {
   const { data } = await sb.auth.getSession();
   if (!data.session) throw 'Please sign in.';
-  const res = await fetch(`${CFG.SUPABASE_URL}/functions/v1/ingest-round`, {
+  let res;
+  try { res = await fetch(`${CFG.SUPABASE_URL}/functions/v1/ingest-round`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', apikey: CFG.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + data.session.access_token },
     body: JSON.stringify(body)
-  });
+  }); } catch { throw 'Could not reach the server (network, size or time limit). Check your connection and try again with fewer images.'; }
   let j = {}; try { j = await res.json(); } catch {}
   if (!res.ok) throw j.error || ('Request failed (' + res.status + ').');
   return j;
@@ -86,7 +87,7 @@ function mainView() {
       : 'Tap to choose the H2H stats screenshots'}
       <input id="fh" type="file" multiple accept="image/png,image/jpeg,image/webp" class="hidden"></label>
     ${S.err ? `<p class="text-sm font-semibold text-red-600">${esc(S.err)}</p>` : ''}
-    <button class="btn" data-a="go" ${S.busy || !S.oddsUrl || !S.resUrl ? 'disabled' : ''}>${S.busy ? 'Reading...' : 'Read and store round'}</button>
+    <button class="btn" data-a="go" ${S.busy || !S.oddsUrl || !S.resUrl ? 'disabled' : ''}>${S.busy ? (S.msg || 'Reading...') : 'Read and store round'}</button>
   </div>
   ${o ? `<div class="card mt-4"><div class="h font-bold text-emerald-700">${o.new_round ? 'Round stored' : 'Added to existing round'} &middot; ${esc(o.ref)}</div>
     <p class="text-sm mt-1">${esc(o.league)}: ${o.stored} fixtures stored (${o.odds_read} odds rows and ${o.results_read} result rows read${o.duplicates ? ', ' + o.duplicates + ' already stored' : ''}).</p>
@@ -114,10 +115,20 @@ document.addEventListener('click', async (e) => {
   else if (a === 'stats') { await loadStats(); render(); }
   else if (a === 'go') {
     S.busy = true; S.err = ''; S.out = null; S.league = $('#lg').value; render();
+    const imgs = S.h2hUrls.map((u) => u.split(',')[1]);
     try {
-      S.out = await callFn({ action: 'ingest', league: S.league, odds_image: S.oddsUrl.split(',')[1], results_image: S.resUrl.split(',')[1], h2h_images: S.h2hUrls.map((u) => u.split(',')[1]) });
-      S.oddsUrl = null; S.resUrl = null; S.h2hUrls = []; await loadStats();
-    } catch (er) { S.err = String(er); }
+      // 1) the round itself (odds + results): small request, creates the round reference
+      S.out = await callFn({ action: 'ingest', league: S.league, odds_image: S.oddsUrl.split(',')[1], results_image: S.resUrl.split(',')[1] });
+      S.out.h2h = [];
+      S.oddsUrl = null; S.resUrl = null; render();
+      // 2) the H2H screens, 2 per request, attached to that same round
+      for (let i = 0; i < imgs.length; i += 2) {
+        S.msg = 'Reading H2H ' + Math.min(i + 2, imgs.length) + ' of ' + imgs.length + '...'; render();
+        try { const r = await callFn({ action: 'attach_h2h', round_id: S.out.round_id, h2h_images: imgs.slice(i, i + 2) }); S.out.h2h.push(...r.h2h); }
+        catch (er) { S.out.h2h.push(...imgs.slice(i, i + 2).map(() => ({ ok: false, error: String(er) }))); }
+      }
+      S.h2hUrls = []; S.msg = ''; await loadStats();
+    } catch (er) { S.err = String(er); S.msg = ''; }
     S.busy = false; render();
   }
 });
