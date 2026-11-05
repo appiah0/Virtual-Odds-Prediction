@@ -91,6 +91,7 @@ function mainView() {
   ${o ? `<div class="card mt-4"><div class="h font-bold text-emerald-700">${o.new_round ? 'Round stored' : 'Added to existing round'} &middot; ${esc(o.ref)}</div>
     <p class="text-sm mt-1">${esc(o.league)}: ${o.stored} fixtures stored (${o.odds_read} odds rows and ${o.results_read} result rows read${o.duplicates ? ', ' + o.duplicates + ' already stored' : ''}).</p>
     ${o.h2h.map((r) => `<p class="text-sm mt-1 ${r.ok ? (r.stored ? 'text-emerald-700' : 'text-amber-700') : 'text-red-600'}">H2H ${r.ok ? esc(r.fixture) + (r.stored ? ': stored' : ': already stored') + (r.linked ? ', linked to its fixture' : ', no matching fixture in this round') : esc(r.error)}</p>`).join('')}
+    ${(o.not_in_league || []).length ? `<p class="text-sm mt-2 text-red-600">Skipped, teams not in ${esc(o.league)}: ${esc(o.not_in_league.join(', '))}</p>` : ''}
     ${o.unmatched_odds.length ? `<p class="text-sm mt-2 text-amber-700">Odds without a result: ${esc(o.unmatched_odds.join(', '))}</p>` : ''}
     ${o.unmatched_results.length ? `<p class="text-sm mt-1 text-amber-700">Results without odds: ${esc(o.unmatched_results.join(', '))}</p>` : ''}</div>` : ''}
   ${statsTable()}
