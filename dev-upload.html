@@ -29,7 +29,7 @@ const CFG = window.CONFIG;
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, flowType: 'pkce' } });
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const S = { h2hUrl: null, h2h: null, oddsUrl: null, resUrl: null, busy: false, out: null, err: '', stats: null, league: 'Germany' };
+const S = { h2hUrls: [], h2h: null, oddsUrl: null, resUrl: null, busy: false, out: null, err: '', stats: null, league: 'Germany' };
 
 async function shrink(file) {
   const bmp = await createImageBitmap(file);
@@ -80,15 +80,19 @@ function mainView() {
     <select id="lg" class="input"><option ${S.league === 'Germany' ? 'selected' : ''}>Germany</option><option ${S.league === 'Spain' ? 'selected' : ''}>Spain</option></select>
     <div class="text-sm font-bold">Odds screen</div>${previewBox('fo', 'Tap to choose the odds screenshot', S.oddsUrl)}
     <div class="text-sm font-bold">Results screen</div>${previewBox('fr', 'Tap to choose the results screenshot', S.resUrl)}
-    <div class="text-sm font-bold">H2H stats screen <span class="font-normal text-gray-500">(optional)</span></div>${previewBox('fh', 'Tap to choose the H2H stats screenshot', S.h2hUrl)}
+    <div class="text-sm font-bold">H2H stats screen <span class="font-normal text-gray-500">(optional, up to 10)</span></div>
+    <label class="drop block cursor-pointer" for="fh">${S.h2hUrls.length
+      ? `<div class="grid ${S.h2hUrls.length === 1 ? 'grid-cols-1' : 'grid-cols-3'} gap-2">${S.h2hUrls.map((u) => `<img src="${u}" alt="" class="mx-auto rounded-xl" style="max-height:${S.h2hUrls.length === 1 ? 200 : 120}px">`).join('')}</div><div class="text-xs mt-2">${S.h2hUrls.length} selected. Tap to change.</div>`
+      : 'Tap to choose the H2H stats screenshots'}
+      <input id="fh" type="file" multiple accept="image/png,image/jpeg,image/webp" class="hidden"></label>
     ${S.err ? `<p class="text-sm font-semibold text-red-600">${esc(S.err)}</p>` : ''}
     <button class="btn" data-a="go" ${S.busy || !S.oddsUrl || !S.resUrl ? 'disabled' : ''}>${S.busy ? 'Reading...' : 'Read and store round'}</button>
   </div>
-  ${o ? `<div class="card mt-4"><div class="h font-bold text-emerald-700">Stored</div>
+  ${o ? `<div class="card mt-4"><div class="h font-bold text-emerald-700">${o.new_round ? 'Round stored' : 'Added to existing round'} &middot; ${esc(o.ref)}</div>
     <p class="text-sm mt-1">${esc(o.league)}: ${o.stored} fixtures stored (${o.odds_read} odds rows and ${o.results_read} result rows read${o.duplicates ? ', ' + o.duplicates + ' already stored' : ''}).</p>
+    ${o.h2h.map((r) => `<p class="text-sm mt-1 ${r.ok ? (r.stored ? 'text-emerald-700' : 'text-amber-700') : 'text-red-600'}">H2H ${r.ok ? esc(r.fixture) + (r.stored ? ': stored' : ': already stored') + (r.linked ? ', linked to its fixture' : ', no matching fixture in this round') : esc(r.error)}</p>`).join('')}
     ${o.unmatched_odds.length ? `<p class="text-sm mt-2 text-amber-700">Odds without a result: ${esc(o.unmatched_odds.join(', '))}</p>` : ''}
     ${o.unmatched_results.length ? `<p class="text-sm mt-1 text-amber-700">Results without odds: ${esc(o.unmatched_results.join(', '))}</p>` : ''}</div>` : ''}
-  ${S.h2h ? `<div class="card mt-4"><div class="h font-bold">H2H</div>${S.h2h.results.map((r) => `<p class="text-sm mt-1 ${r.ok ? (r.stored ? 'text-emerald-700' : 'text-amber-700') : 'text-red-600'}">${r.ok ? esc(r.fixture) + (r.stored ? ': stored' : ': already stored') : esc(r.error)}</p>`).join('')}</div>` : ''}
   ${statsTable()}
   <button class="mt-4 text-sm font-bold text-purple-700 underline" data-a="stats">Refresh stats</button>`;
 }
@@ -108,25 +112,25 @@ document.addEventListener('click', async (e) => {
   } else if (a === 'out') { await sb.auth.signOut(); S.stats = null; S.out = null; render(); }
   else if (a === 'stats') { await loadStats(); render(); }
   else if (a === 'go') {
-    S.busy = true; S.err = ''; S.out = null; S.h2h = null; S.league = $('#lg').value; render();
-    const errs = [];
+    S.busy = true; S.err = ''; S.out = null; S.league = $('#lg').value; render();
     try {
-      S.out = await callFn({ action: 'ingest', league: S.league, odds_image: S.oddsUrl.split(',')[1], results_image: S.resUrl.split(',')[1] });
-      S.oddsUrl = null; S.resUrl = null;
-    } catch (er) { errs.push('Round: ' + String(er)); }
-    if (S.h2hUrl) {                      // runs even if the round was a duplicate, so the H2H is not lost
-      try { S.h2h = await callFn({ action: 'h2h', league: S.league, images: [S.h2hUrl.split(',')[1]] }); S.h2hUrl = null; }
-      catch (er) { errs.push('H2H: ' + String(er)); }
-    }
-    S.err = errs.join(' '); await loadStats();
+      S.out = await callFn({ action: 'ingest', league: S.league, odds_image: S.oddsUrl.split(',')[1], results_image: S.resUrl.split(',')[1], h2h_images: S.h2hUrls.map((u) => u.split(',')[1]) });
+      S.oddsUrl = null; S.resUrl = null; S.h2hUrls = []; await loadStats();
+    } catch (er) { S.err = String(er); }
     S.busy = false; render();
   }
 });
 document.addEventListener('change', async (e) => {
-  if (['fo', 'fr', 'fh'].includes(e.target.id)) {
+  if (e.target.id === 'fh') {
+    const files = [...e.target.files].slice(0, 10); if (!files.length) return;
+    S.league = $('#lg') ? $('#lg').value : S.league;
+    try { S.h2hUrls = await Promise.all(files.map(shrink)); S.err = ''; } catch { S.err = 'Could not open one of those images.'; }
+    render(); return;
+  }
+  if (e.target.id === 'fo' || e.target.id === 'fr') {
     const f = e.target.files[0]; if (!f) return;
     S.league = $('#lg') ? $('#lg').value : S.league;
-    try { const u = await shrink(f); if (e.target.id === 'fo') S.oddsUrl = u; else if (e.target.id === 'fr') S.resUrl = u; else S.h2hUrl = u; S.err = ''; } catch { S.err = 'Could not open that image.'; }
+    try { const u = await shrink(f); if (e.target.id === 'fo') S.oddsUrl = u; else S.resUrl = u; S.err = ''; } catch { S.err = 'Could not open that image.'; }
     render();
   }
 });
