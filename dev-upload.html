@@ -29,7 +29,7 @@ const CFG = window.CONFIG;
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, flowType: 'pkce' } });
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const S = { oddsUrl: null, resUrl: null, busy: false, out: null, err: '', stats: null, league: 'Germany' };
+const S = { h2hUrls: [], h2h: null, oddsUrl: null, resUrl: null, busy: false, out: null, err: '', stats: null, league: 'Germany' };
 
 async function shrink(file) {
   const bmp = await createImageBitmap(file);
@@ -66,7 +66,7 @@ function previewBox(id, label, url) {
 function statsTable() {
   const s = S.stats; if (!s) return '';
   return `<div class="card mt-4"><div class="h font-bold">Stored so far</div>
-    <p class="text-sm text-gray-500 mt-1">${s.rounds} rounds, ${s.fixtures} fixtures</p>
+    <p class="text-sm text-gray-500 mt-1">${s.rounds} rounds, ${s.fixtures} fixtures, ${s.h2h ?? 0} H2H screens</p>
     ${s.teams.length ? `<div class="overflow-x-auto mt-3"><table class="w-full"><thead><tr class="text-gray-500"><th>Team</th><th>Fix</th><th>Fav</th><th>Fav won</th><th>Drew</th><th>Lost</th></tr></thead><tbody>
       ${s.teams.map((t) => `<tr class="border-t border-gray-100"><td class="font-semibold">${esc(t.team)}</td><td>${t.fixtures}</td><td>${t.times_favourite}</td><td>${t.favourite_won}</td><td>${t.favourite_drew}</td><td>${t.favourite_lost}</td></tr>`).join('')}
     </tbody></table></div>` : '<p class="text-sm text-gray-500 mt-2">No fixtures stored yet.</p>'}</div>`;
@@ -87,6 +87,14 @@ function mainView() {
     <p class="text-sm mt-1">${esc(o.league)}: ${o.stored} fixtures stored (${o.odds_read} odds rows and ${o.results_read} result rows read${o.duplicates ? ', ' + o.duplicates + ' already stored' : ''}).</p>
     ${o.unmatched_odds.length ? `<p class="text-sm mt-2 text-amber-700">Odds without a result: ${esc(o.unmatched_odds.join(', '))}</p>` : ''}
     ${o.unmatched_results.length ? `<p class="text-sm mt-1 text-amber-700">Results without odds: ${esc(o.unmatched_results.join(', '))}</p>` : ''}</div>` : ''}
+  <div class="card mt-4 space-y-3">
+    <div class="h font-bold">H2H stats screens</div>
+    <p class="text-sm text-gray-500">The "Stats - H2H" screen of a fixture (form, last 5, win probability, previous meetings, averages). Choose up to 10 images, one fixture each. Uses the league selected above.</p>
+    <label class="drop block cursor-pointer" for="fh">${S.h2hUrls.length ? S.h2hUrls.length + ' H2H screenshot' + (S.h2hUrls.length > 1 ? 's' : '') + ' selected (tap to change)' : 'Tap to choose H2H screenshots'}
+      <input id="fh" type="file" multiple accept="image/png,image/jpeg,image/webp" class="hidden"></label>
+    <button class="btn" data-a="h2h" ${S.busy || !S.h2hUrls.length ? 'disabled' : ''}>${S.busy ? 'Reading...' : 'Read and store H2H'}</button>
+    ${S.h2h ? S.h2h.results.map((r) => `<p class="text-sm ${r.ok ? (r.stored ? 'text-emerald-700' : 'text-amber-700') : 'text-red-600'}">${r.ok ? esc(r.fixture) + (r.stored ? ': stored' : ': already stored') : esc(r.error)}</p>`).join('') : ''}
+  </div>
   ${statsTable()}
   <button class="mt-4 text-sm font-bold text-purple-700 underline" data-a="stats">Refresh stats</button>`;
 }
@@ -104,6 +112,14 @@ document.addEventListener('click', async (e) => {
     const { error } = await sb.auth.signInWithPassword({ email: $('#em').value.trim().toLowerCase(), password: $('#pw').value });
     S.err = error ? 'Incorrect email or password.' : ''; if (!error) await loadStats(); render();
   } else if (a === 'out') { await sb.auth.signOut(); S.stats = null; S.out = null; render(); }
+  else if (a === 'h2h') {
+    S.busy = true; S.err = ''; S.h2h = null; S.league = $('#lg').value; render();
+    try {
+      S.h2h = await callFn({ action: 'h2h', league: S.league, images: S.h2hUrls.map((u) => u.split(',')[1]) });
+      S.h2hUrls = []; await loadStats();
+    } catch (er) { S.err = String(er); }
+    S.busy = false; render();
+  }
   else if (a === 'stats') { await loadStats(); render(); }
   else if (a === 'go') {
     S.busy = true; S.err = ''; S.out = null; S.league = $('#lg').value; render();
@@ -115,6 +131,12 @@ document.addEventListener('click', async (e) => {
   }
 });
 document.addEventListener('change', async (e) => {
+  if (e.target.id === 'fh') {
+    const files = [...e.target.files].slice(0, 10); if (!files.length) return;
+    S.league = $('#lg') ? $('#lg').value : S.league;
+    try { S.h2hUrls = await Promise.all(files.map(shrink)); S.err = ''; } catch { S.err = 'Could not open one of those images.'; }
+    render(); return;
+  }
   if (e.target.id === 'fo' || e.target.id === 'fr') {
     const f = e.target.files[0]; if (!f) return;
     S.league = $('#lg') ? $('#lg').value : S.league;
