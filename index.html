@@ -1289,8 +1289,27 @@ async function runScan() {
     }
     if (st) { const list = stage === 'A' ? stageA : stageB; st.textContent = list[Math.min(2, Math.floor((stage === 'A' ? pct : pct - 50) / (stage === 'A' ? 17 : 14)))] || list[2]; }
   }, 350);
+
   try {
+    // 1. Get scanned matches from your odds scanner
     const r = await callFn('scan-odds', { action: 'scan', tier: t.id, image: P.dataUrl.split(',')[1] });
+
+    // 2. PASS MATCHES THROUGH TRUE MONTE CARLO SIMULATION
+    try {
+      const mcResponse = await callFn('predict-monte-carlo', { matches: r.matches });
+      r.matches.forEach((m, i) => {
+        const prediction = mcResponse.results[i];
+        if (prediction && prediction.source === 'monte-carlo') {
+          m.analysis = m.analysis || {};
+          m.analysis.p = prediction.p; // Updates percentages with [Home%, Draw%, Away%] from simulation
+          m.analysis.source = 'monte-carlo';
+          m.analysis.expected_goals = prediction.expected_goals;
+        }
+      });
+    } catch (mcErr) {
+      console.error('Monte Carlo simulation overlay error:', mcErr);
+    }
+
     clearInterval(timer);
     Object.assign(P, { scanId: r.scan_id, result: r.matches, resultKind: r.kind, reference: r.reference, found: r.found, avgMargin: r.avg_margin, step: 'result' });
   } catch (err) {
