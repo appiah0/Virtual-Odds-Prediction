@@ -42,7 +42,7 @@ async function callFn(body) {
   const { data } = await sb.auth.getSession();
   if (!data.session) throw 'Please sign in.';
   let res;
-  try { res = await fetch(`${CFG.SUPABASE_URL}/functions/v1/ingest-round`, {
+  try { res = await fetch(`${CFG.SUPABASE_URL}/functions/v1/bright-service`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', apikey: CFG.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + data.session.access_token },
     body: JSON.stringify(body)
