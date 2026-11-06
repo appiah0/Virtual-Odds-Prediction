@@ -64,6 +64,69 @@ function previewBox(id, label, url) {
   return `<label class="drop block cursor-pointer" for="${id}">${url ? `<img src="${url}" alt="" class="mx-auto rounded-xl" style="max-height:200px">` : label}
     <input id="${id}" type="file" accept="image/png,image/jpeg,image/webp" class="hidden"></label>`;
 }
+function modelCard() {
+  const m = S.model;
+  return `<div class="card mt-4"><div class="h font-bold">Monte Carlo backtest</div>
+    <p class="text-sm text-gray-500 mt-1">Simulates 50,000 matches per fixture from the stored averages, then scores every method against the real results of the rounds you stored. It only measures; it does not predict the next round.</p>
+    <button class="btn mt-3" data-a="model" ${S.busy ? 'disabled' : ''}>${S.busy && S.msg ? esc(S.msg) : 'Run backtest'}</button>
+    ${S.modelErr ? `<p class="text-sm text-red-600 mt-2">${esc(S.modelErr)}</p>` : ''}
+    ${m ? `<p class="text-sm mt-3">Tested on <b>${m.n}</b> fixtures with every input available (out of ${m.total} stored). Lower log loss and Brier are better; random guessing scores ${m.uniform.toFixed(3)} log loss.</p>
+    <div class="overflow-x-auto mt-2"><table class="w-full text-xs"><thead><tr class="text-gray-500 text-left"><th>Method</th><th>Log loss</th><th>Brier</th><th>Right pick</th><th>vs odds (log loss, +/- 2 se)</th></tr></thead><tbody>
+    ${m.rows.map((r) => `<tr class="border-t border-gray-100"><td class="font-semibold">${esc(r.name)}</td><td>${r.ll.toFixed(3)}</td><td>${r.brier.toFixed(3)}</td><td>${(r.acc * 100).toFixed(0)}%</td><td>${r.diff === null ? '-' : (r.diff >= 0 ? '+' : '') + r.diff.toFixed(3) + ' &plusmn; ' + (2 * r.se).toFixed(3)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="text-sm mt-3">${esc(m.verdict)}</p>` : ''}
+  </div>`;
+}
+const poisson = (l) => { const L = Math.exp(-l); let k = 0, p = 1; do { k++; p *= Math.random(); } while (p > L); return k - 1; };
+function monteCarlo(lh, la, n) { let h = 0, d = 0, a = 0; for (let i = 0; i < n; i++) { const x = poisson(lh), y = poisson(la); if (x > y) h++; else if (x < y) a++; else d++; } return [h / n, d / n, a / n]; }
+const unit = (v) => { const t = v[0] + v[1] + v[2]; return v.map((x) => x / t); };
+const num = (v) => (v === null || v === undefined || v === '' || isNaN(Number(v)) ? null : Number(v));
+async function runModel() {
+  S.busy = true; S.model = null; S.modelErr = ''; S.msg = 'Loading data...'; render();
+  try {
+    const { rows } = await callFn({ action: 'training' });
+    const idx = { H: 0, D: 1, A: 2 };
+    const use = [];
+    for (const r of rows) {
+      const oh = num(r.odds_home), od = num(r.odds_draw), oa = num(r.odds_away);
+      const ph = num(r.prob_home), pd = num(r.prob_draw), pa = num(r.prob_away);
+      const gh = num(r.ag_home_home) ?? num(r.ag_all_home), ga = num(r.ag_away_away) ?? num(r.ag_all_away);
+      const nh = num(r.home_n_prev), na = num(r.away_n_prev);
+      if (![oh, od, oa, ph, pd, pa, gh, ga].every((v) => v !== null && v > 0) || !(nh >= 3 && na >= 3)) continue;
+      const rg = [(num(r.home_gf_ma5) + num(r.away_ga_ma5)) / 2, (num(r.away_gf_ma5) + num(r.home_ga_ma5)) / 2];
+      if (!rg.every((v) => v > 0)) continue;
+      use.push({ y: idx[r.result], odds: unit([1 / oh, 1 / od, 1 / oa]), sys: unit([ph, pd, pa]), lam: [Math.max(0.1, gh), Math.max(0.1, ga)], rlam: rg.map((v) => Math.max(0.1, v)) });
+    }
+    if (use.length < 20) throw 'Not enough complete fixtures yet (' + use.length + '). Upload more rounds with H2H screens.';
+    const N = 50000, meth = { odds: [], sys: [], mc: [], mcr: [], blend: [], freq: [] };
+    const freq = [0, 0, 0]; use.forEach((u) => freq[u.y]++); const fp = freq.map((x) => x / use.length);
+    for (let i = 0; i < use.length; i++) {
+      const u = use[i];
+      if (i % 4 === 0) { S.msg = 'Simulating ' + i + ' / ' + use.length + '...'; render(); await new Promise((r) => setTimeout(r, 0)); }
+      const c = monteCarlo(u.lam[0], u.lam[1], N), cr = monteCarlo(u.rlam[0], u.rlam[1], N);
+      meth.odds.push(u.odds); meth.sys.push(u.sys); meth.mc.push(c); meth.mcr.push(cr);
+      meth.blend.push(unit([(u.odds[0] + c[0]) / 2, (u.odds[1] + c[1]) / 2, (u.odds[2] + c[2]) / 2])); meth.freq.push(fp);
+    }
+    const clamp = (p) => Math.max(1e-6, p);
+    const llOf = (P) => P.map((p, i) => -Math.log(clamp(p[use[i].y])));
+    const base = llOf(meth.odds);
+    const names = { odds: 'Odds, margin removed', sys: 'Game win probability (H2H screen)', mc: 'Monte Carlo from average goals', mcr: 'Monte Carlo from last-5 moving averages', blend: 'Blend: odds + Monte Carlo', freq: 'Always the overall H/D/A rates' };
+    const out = Object.keys(names).map((k) => {
+      const P = meth[k], l = llOf(P), n = l.length, mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+      const brier = mean(P.map((p, i) => [0, 1, 2].reduce((s2, j) => s2 + (p[j] - (use[i].y === j ? 1 : 0)) ** 2, 0)));
+      const acc = mean(P.map((p, i) => (p.indexOf(Math.max(...p)) === use[i].y ? 1 : 0)));
+      let diff = null, se = null;
+      if (k !== 'odds') { const d = l.map((x, i) => x - base[i]); const md = mean(d); diff = md; se = Math.sqrt(d.reduce((s2, x) => s2 + (x - md) ** 2, 0) / (n - 1)) / Math.sqrt(n); }
+      return { key: k, name: names[k], ll: mean(l), brier, acc, diff, se };
+    });
+    const better = out.filter((r) => r.diff !== null && r.diff + 2 * r.se < 0);
+    const verdict = better.length
+      ? 'On this data, ' + better.map((r) => r.name).join(' and ') + ' scored better than the odds by more than the noise. Confirm it on new rounds before trusting it.'
+      : 'No method scored reliably better than the odds on this data. The differences are within noise, which is what you would expect if results are random. More rounds will tighten this.';
+    S.model = { n: use.length, total: rows.length, uniform: Math.log(3), rows: out, verdict };
+  } catch (er) { S.modelErr = String(er); }
+  S.busy = false; S.msg = ''; render();
+}
 function statsTable() {
   const s = S.stats; if (!s) return '';
   return `<div class="card mt-4"><div class="h font-bold">Stored so far</div>
@@ -103,6 +166,7 @@ function mainView() {
     ${(o.not_in_league || []).length ? `<p class="text-sm mt-2 text-red-600">Skipped, teams not in ${esc(o.league)}: ${esc(o.not_in_league.join(', '))}</p>` : ''}
     ${o.unmatched_odds.length ? `<p class="text-sm mt-2 text-amber-700">Odds without a result: ${esc(o.unmatched_odds.join(', '))}</p>` : ''}
     ${o.unmatched_results.length ? `<p class="text-sm mt-1 text-amber-700">Results without odds: ${esc(o.unmatched_results.join(', '))}</p>` : ''}</div>` : ''}
+  ${modelCard()}
   ${statsTable()}
   <button class="mt-4 text-sm font-bold text-purple-700 underline" data-a="stats">Refresh stats</button>`;
 }
@@ -121,6 +185,7 @@ document.addEventListener('click', async (e) => {
     S.err = error ? 'Incorrect email or password.' : ''; if (!error) await loadStats(); render();
   } else if (a === 'out') { await sb.auth.signOut(); S.stats = null; S.out = null; render(); }
   else if (a === 'stats') { await loadStats(); render(); }
+  else if (a === 'model') { runModel(); }
   else if (a === 'go') {
     S.busy = true; S.err = ''; S.out = null; S.league = $('#lg').value; render();
     const imgs = S.h2hUrls.map((u) => u.split(',')[1]);
