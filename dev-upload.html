@@ -70,7 +70,15 @@ function statsTable() {
     <p class="text-sm text-gray-500 mt-1">${s.rounds} rounds, ${s.fixtures} fixtures, ${s.h2h ?? 0} H2H screens</p>
     ${s.teams.length ? `<div class="overflow-x-auto mt-3"><table class="w-full"><thead><tr class="text-gray-500"><th>Team</th><th>Fix</th><th>Fav</th><th>Fav won</th><th>Drew</th><th>Lost</th></tr></thead><tbody>
       ${s.teams.map((t) => `<tr class="border-t border-gray-100"><td class="font-semibold">${esc(t.team)}</td><td>${t.fixtures}</td><td>${t.times_favourite}</td><td>${t.favourite_won}</td><td>${t.favourite_drew}</td><td>${t.favourite_lost}</td></tr>`).join('')}
-    </tbody></table></div>` : '<p class="text-sm text-gray-500 mt-2">No fixtures stored yet.</p>'}</div>`;
+    </tbody></table></div>` : '<p class="text-sm text-gray-500 mt-2">No fixtures stored yet.</p>'}</div>` + h2hTable(s);
+}
+function h2hTable(s) {
+  const r = s.recent_h2h || []; if (!r.length) return '';
+  const g = (v) => (v === null || v === undefined ? '-' : v);
+  return `<div class="card mt-4"><div class="h font-bold">Latest H2H stored</div><p class="text-sm text-gray-500 mt-1">The last ${r.length} H2H screens, as read from the images.</p>
+    <div class="overflow-x-auto mt-3"><table class="w-full text-xs"><thead><tr class="text-gray-500 text-left"><th>Match</th><th>Form</th><th>Pos</th><th>Win prob</th><th>Prev</th><th>Avg pts</th><th>Goals (all/home/away)</th><th>Highest win</th></tr></thead><tbody>
+    ${r.map((x) => { const ag = x.avg_goals || {}; const o = ag.overall || {}, h = ag.home || {}, a = ag.away || {}, hw = x.highest_win || {}; return `<tr class="border-t border-gray-100 align-top"><td class="font-semibold whitespace-nowrap">${esc(x.home)} v ${esc(x.away)}</td><td>${g(x.form_home)}/${g(x.form_away)}</td><td>${g(x.pos_home)}/${g(x.pos_away)}</td><td>${g(x.prob_home)}/${g(x.prob_draw)}/${g(x.prob_away)}</td><td>${g(x.prev_home_wins)}-${g(x.prev_draws)}-${g(x.prev_away_wins)}</td><td>${g(x.avg_points_home)}/${g(x.avg_points_away)}</td><td class="whitespace-nowrap">${g(o.home)}-${g(o.away)} / ${g(h.home)}-${g(h.away)} / ${g(a.home)}-${g(a.away)}</td><td>${g(hw.home)} / ${g(hw.away)}</td></tr>`; }).join('')}
+    </tbody></table></div></div>`;
 }
 function mainView() {
   const o = S.out;
@@ -91,7 +99,7 @@ function mainView() {
   </div>
   ${o ? `<div class="card mt-4"><div class="h font-bold text-emerald-700">${o.new_round ? 'Round stored' : 'Added to existing round'} &middot; ${esc(o.ref)}</div>
     <p class="text-sm mt-1">${esc(o.league)}: ${o.stored} fixtures stored (${o.odds_read} odds rows and ${o.results_read} result rows read${o.duplicates ? ', ' + o.duplicates + ' already stored' : ''}).</p>
-    ${o.h2h.map((r) => `<p class="text-sm mt-1 ${r.ok ? (r.stored ? 'text-emerald-700' : 'text-amber-700') : 'text-red-600'}">H2H ${r.ok ? esc(r.fixture) + (r.stored ? ': stored' : ': already stored') + (r.linked ? ', linked to its fixture' : ', no matching fixture in this round') : esc(r.error)}</p>`).join('')}
+    ${o.h2h.map((r) => `<p class="text-sm mt-1 ${r.ok ? (r.duplicate ? 'text-amber-700' : 'text-emerald-700') : 'text-red-600'}">H2H ${r.duplicate ? 'screenshot already uploaded before, skipped' : r.ok ? esc(r.fixture) + ': stored' + (r.linked ? ', linked to its fixture' : ', no matching fixture in this round') : esc(r.error)}</p>`).join('')}
     ${(o.not_in_league || []).length ? `<p class="text-sm mt-2 text-red-600">Skipped, teams not in ${esc(o.league)}: ${esc(o.not_in_league.join(', '))}</p>` : ''}
     ${o.unmatched_odds.length ? `<p class="text-sm mt-2 text-amber-700">Odds without a result: ${esc(o.unmatched_odds.join(', '))}</p>` : ''}
     ${o.unmatched_results.length ? `<p class="text-sm mt-1 text-amber-700">Results without odds: ${esc(o.unmatched_results.join(', '))}</p>` : ''}</div>` : ''}
