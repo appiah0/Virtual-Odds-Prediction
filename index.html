@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#7c3aed">
+<title>Virtual Odds Prediction - Instant Virtuals - Virtual Football</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="canonical" href="https://virtual-odds-prediction.vercel.app/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Virtual Odds Prediction">
+<meta property="og:title" content="Virtual Odds Prediction">
+<meta property="og:description" content="Upload an Instant Football screenshot and our AI model analyses the matches to produce accurate predictions instantly.">
+<meta property="og:url" content="https://virtual-odds-prediction.vercel.app/">
+<meta property="og:image" content="https://virtual-odds-prediction.vercel.app/logo.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = { theme: { extend: { fontFamily: { display: ['Outfit','sans-serif'], sans: ['Plus Jakarta Sans','sans-serif'] } } } };
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://js.paystack.co/v2/inline.js"></script>
+<script src="config.js"></script>
+<style>
+:root{--p1:#a855f7;--p2:#7c3aed;--ink:#0f1226;--mute:#6b7280;--line:#e6e8f2;--soft:#f5f3ff}
+*{-webkit-tap-highlight-color:transparent}
+html,body{background:#fff;color:var(--ink);font-family:'Plus Jakarta Sans',sans-serif}
+.font-display{font-family:'Outfit',sans-serif}
+.wrap{max-width:480px;margin:0 auto;padding:0 20px}
+.card{background:#fff;border:1.5px solid var(--line);border-radius:22px}
+.grad{background:linear-gradient(135deg,var(--p1),var(--p2))}
+.grad-text{background:linear-gradient(90deg,#7c3aed,#db2777);-webkit-background-clip:text;background-clip:text;color:transparent}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:'Outfit',sans-serif;font-weight:700;border-radius:999px;padding:15px 24px;transition:transform .15s;cursor:pointer;border:0}
+.btn:active{transform:scale(.97)}
+.btn-primary{color:#fff;background:linear-gradient(135deg,var(--p1),var(--p2));box-shadow:0 10px 24px -8px rgba(124,58,237,.6)}
+.btn-ghost{background:#fff;color:var(--ink);border:1.5px solid #d6d9e6}
+.btn-green{color:#fff;background:linear-gradient(135deg,#10b981,#047857)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:7px 12px;border-radius:999px;background:#f3f5fa;border:1px solid var(--line)}
+.input{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:13px 14px;font-size:15px;background:#fff;outline:none;transition:border .15s,box-shadow .15s}
+.input:focus{border-color:var(--p2);box-shadow:0 0 0 4px rgba(124,58,237,.12)}
+.label{font-size:13px;font-weight:700;margin-bottom:6px;display:block;color:#374151}
+.dark-card{background:linear-gradient(135deg,#0f1226,#1e1b4b);color:#fff;border-radius:24px}
+.eyebrow{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:#7c3aed}
+.i{width:18px;height:18px;stroke-width:2.2}
+.i-lg{width:22px;height:22px}
+.star-on{color:#f59e0b;fill:#f59e0b}
+.star-off{color:#d1d5db}
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 0 8px;font-size:10.5px;font-weight:600;color:#8b90a5}
+.nav a.on{color:var(--p2)}
+.nav a.on .pill{background:#ede9fe}
+.pill{padding:4px 14px;border-radius:999px;display:flex}
+.bar{height:9px;border-radius:999px;background:#eceef6;overflow:hidden}
+.bar>span{display:block;height:100%;border-radius:999px;transition:width .5s}
+.faq-a{display:none}.faq.open .faq-a{display:block}.faq.open .chev{transform:rotate(180deg)}
+.chev{transition:transform .2s}
+.drop{border:2px dashed #c4b5fd;background:var(--soft);border-radius:22px}
+.drop.over{background:#ede9fe;border-color:var(--p2)}
+.tag{position:absolute;top:-11px;left:16px;font-size:11px;font-weight:800;letter-spacing:.04em;color:#fff;padding:3px 12px;border-radius:8px 8px 8px 0;background:linear-gradient(135deg,var(--p1),var(--p2))}
+.toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-120px);background:#0f1226;color:#fff;padding:12px 18px;border-radius:14px;font-size:14px;font-weight:600;z-index:100;transition:transform .3s;max-width:90vw}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.status-pending{background:#fef3c7;color:#92400e}.status-successful{background:#d1fae5;color:#065f46}.status-failed{background:#fee2e2;color:#991b1b}.status-canceled{background:#e5e7eb;color:#374151}
+.dots{display:flex;gap:6px;justify-content:center;margin-top:14px}.dots span{width:8px;height:8px;border-radius:50%;background:#10b981;opacity:.25;animation:dot 1.2s infinite}.dots span:nth-child(2){animation-delay:.2s}.dots span:nth-child(3){animation-delay:.4s}.dots span:nth-child(4){animation-delay:.6s;background:#22d3ee}
+@keyframes dot{0%,100%{opacity:.25;transform:scale(1)}50%{opacity:1;transform:scale(1.35)}}
+.ring{width:84px;height:84px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle,#e0f2fe,#bae6fd);box-shadow:0 0 0 6px rgba(56,189,248,.18),0 0 24px rgba(56,189,248,.45)}
+.scanline{position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,transparent,#22d3ee,transparent);box-shadow:0 0 14px 4px rgba(34,211,238,.55);animation:scan 2.2s ease-in-out infinite}
+@keyframes scan{0%{top:0}50%{top:calc(100% - 3px)}100%{top:0}}
+.modal-bg{position:fixed;inset:0;background:rgba(15,18,38,.55);backdrop-filter:blur(3px);z-index:90;display:flex;align-items:center;justify-content:center;padding:24px}
+.modal{background:#fff;border-radius:26px;max-width:360px;width:100%;padding:26px;text-align:center;box-shadow:0 30px 60px -20px rgba(15,18,38,.5);animation:pop .25s ease}
+@keyframes pop{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin 1s linear infinite}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+:focus-visible{outline:3px solid #c4b5fd;outline-offset:2px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* =========================================================
+   CONFIG - fill in the Supabase values (the anon key is public by design).
+   The AI vision key is NOT here. It lives in a Supabase Edge Function secret.
+   ========================================================= */
+const CONFIG = window.CONFIG || {
+  SUPABASE_URL: 'https://hyxrwhgakduytptasihp.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_lJKyhjDgsKNZATFaDDwgNg_6vwJ2V_n',
+  support: { email: 'support.virtualoddsprediction@gmail.com', whatsapp: '233506920689', telegram: 'VirtualOddsPrediction'},
+  lobbyUrl: 'https://www.sportybet.com/gh/'
+};
+const CONFIGURED = !CONFIG.SUPABASE_URL.includes('YOUR-PROJECT');
+const BRAND = 'Virtual Odds Prediction';
+const SITE_URL = 'https://virtual-odds-prediction.vercel.app/'; // official link, used in email links
+localStorage.removeItem('iv_last_login');
+
+/* Display copy for tiers. The server (scan-odds function) holds the authoritative costs and match limits. */
+const TIERS = {
+  coins: [
+    { id: 'bronze',     name: 'Bronze',     amount: 1000, n: 1, desc: 'Single Match Prediction • 85% Accuracy',  icon: 'shield',        tile: 'linear-gradient(135deg,#fde68a,#fbbf24)', fg: '#b45309' },
+    { id: 'silver_pro', name: 'Silver Pro', amount: 2500, n: 2, desc: 'Match Outcome Predictions • 90% Accuracy', icon: 'medal',         tile: 'linear-gradient(135deg,#fde68a,#f59e0b)', fg: '#92400e', tag: 'POPULAR' },
+    { id: 'gold_ultra', name: 'Gold Ultra', amount: 5000, n: 5, desc: 'Match Predictions Combo • 95% Accuracy',   icon: 'crown',         tile: 'linear-gradient(135deg,#fbbf24,#d97706)', fg: '#fff' }
+  ],
+  diamonds: [
+    { id: 'silver_vip', name: 'Silver VIP', amount: 20, n: 1, desc: 'Single High-Confidence Match Pick • 94% Accuracy',  icon: 'gem',           tile: 'linear-gradient(135deg,#ede9fe,#c4b5fd)', fg: '#7c3aed' },
+    { id: 'gold_vip',   name: 'Gold VIP',   amount: 40, n: 2, desc: 'High-Confidence Match Picks • 96% Accuracy, detailed',        icon: 'crown',         tile: 'linear-gradient(135deg,#a855f7,#7c3aed)', fg: '#fff', tag: 'VIP BEST' },
+    { id: 'master_vip', name: 'Master VIP', amount: 80, n: 5, desc: 'Maximum Accuracy Predictions • 98% Accuracy, detailed',        icon: 'wand-sparkles', tile: 'linear-gradient(135deg,#f43f5e,#be123c)', fg: '#fff' }
+  ]
+};
+  /* Static stats on the dashboard. Edit by hand. */
+const STATS = {
+  readings: '94.5%',            // EDIT
+  topped:   'GH\u20B5 250K+',  // EDIT
+  members:  '15,000+'               // EDIT
+};
+  const PLATFORM = {
+  members:  '15,000+',  // EDIT: real member count
+  leagues:  '94.5%',  // leagues your reader supports
+  readings: 'GH₵ 250K+'   // EDIT: real readings done
+};
+const COIN_PACKS = [
+  { id: 'starter', name: 'Starter Coins Pack', price: 100, desc: '1,000 Coins for Predictions.' },
+  { id: 'pro',     name: 'Pro Coins Pack',     price: 700,  desc: '4,500 Coins for Accurate Picks.', popular: true },
+  { id: 'mega',    name: 'Mega Coins Pack',    price: 1200, desc: '8,300 Coins for High Accuracy Picks.' }
+];
+const DIAMOND_PACKS = [
+  { id: 'd20', name: 'Silver Diamonds Pack', price: 1400, desc: '100 Diamonds for VIP Predictions.' },
+  { id: 'd40', name: 'Gold Diamonds Pack',   price: 2000, desc: '500 Diamonds High VIP Picks.', popular: true },
+  { id: 'd80', name: 'Master Diamonds Pack', price: 2800, desc: '800 Diamonds for Advanced Model Access.' }
+];
+
+/* =========================================================
+   Helpers
+   ========================================================= */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ic = (n, c = '') => `<i data-lucide="${n}" class="i ${c}"></i>`;
+const money = n => 'GH\u20B5 ' + Number(n || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtDate = t => new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 3200); }
+function normPhone(p) { let d = String(p).replace(/\D/g, ''); if (d.startsWith('233')) d = d.slice(3); if (d.startsWith('0')) d = d.slice(1); return d; }
+const msg = e => (typeof e === 'string' ? e : e?.message || 'Something went wrong.');
+
+/* =========================================================
+   Supabase client. "Remember me" decides localStorage vs sessionStorage.
+   ========================================================= */
+const adapter = {
+  getItem: k => localStorage.getItem(k) ?? sessionStorage.getItem(k),
+  setItem: (k, v) => {
+    if (localStorage.getItem('iv_remember') === '0') { sessionStorage.setItem(k, v); localStorage.removeItem(k); }
+    else { localStorage.setItem(k, v); sessionStorage.removeItem(k); }
+  },
+  removeItem: k => { localStorage.removeItem(k); sessionStorage.removeItem(k); }
+};
+const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
+  auth: { storage: adapter, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' }
+});
+async function session() { const { data } = await sb.auth.getSession(); return data.session; }
+async function callFn(name, body, authed = true) {
+  const s = authed ? await session() : null;
+  const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/${name}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', apikey: CONFIG.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + (s ? s.access_token : CONFIG.SUPABASE_ANON_KEY) },
+    body: JSON.stringify(body)
+  });
+  let data = {}; try { data = await res.json(); } catch {}
+  if (!res.ok) throw data.error || ('Request failed (' + res.status + ').');
+  return data;
+}
+
+/* =========================================================
+   State and data
+   ========================================================= */
+const state = { me: null, members: null, packTab: 'coins', txFilter: 'all', fbRating: 0, fbDraft: '' };
+const P = { step: 'tiers', kind: 'coins', tier: null, dataUrl: null, error: '', scanId: null, result: null, resultKind: 'coins', reference: '', found: 0, avgMargin: null };
+
+async function loadMe() {
+  const s = await session();
+  if (!s) { state.me = null; return null; }
+  const [p, t, sc] = await Promise.all([
+    sb.from('profiles').select('*').eq('id', s.user.id).maybeSingle(),
+    sb.from('transactions').select('*').order('created_at', { ascending: false }).limit(100),
+    sb.from('scans').select('id,tier,allowed,created_at', { count: 'exact' }).order('created_at', { ascending: false }).limit(5),   
+  ]);
+  if (!p.data) { state.me = null; return null; } 
+  state.me = { email: s.user.email, ...p.data, cash: Number(p.data.cash), tx: t.data || [], scans: sc.data || [], scanCount: sc.count || 0 };
+  return state.me;
+}
+
+const Auth = {
+  async register(f) {
+    const email = f.email.trim().toLowerCase(), phone = normPhone(f.phone);
+    if (!f.first.trim() || !f.last.trim()) throw 'Enter your first name and surname.';
+    if (!/^\S+@\S+\.\S+$/.test(email)) throw 'Enter a valid email address.';
+    if (phone.length !== 9) throw 'Enter a valid Ghana phone number (9 digits after +233).';
+    if (f.password.length < 6) throw 'Password must be at least 6 characters.';
+    if (f.password !== f.confirm) throw 'Passwords do not match.';
+    if (!f.terms) throw 'Please accept the Terms & Conditions.';
+    if (!CONFIGURED) throw 'Supabase is not configured yet. Add your project URL and anon key in CONFIG.';
+    localStorage.setItem('iv_remember', '1');
+    const { data, error } = await sb.auth.signUp({
+      email, password: f.password,
+      options: { data: { first_name: f.first.trim(), other_name: f.other.trim(), last_name: f.last.trim(), phone }, emailRedirectTo: SITE_URL }
+    });
+    if (error) {
+      if (/database error/i.test(error.message)) throw 'That phone number is already registered.';
+      throw /registered/i.test(error.message) ? 'An account with this email already exists.' : error.message;
+    }
+    return !!data.session;
+  },
+  async login(identifier, password, remember) {
+    if (!CONFIGURED) throw 'Supabase is not configured yet. Add your project URL and anon key in CONFIG.';
+    localStorage.setItem('iv_remember', remember ? '1' : '0');
+    const id = identifier.trim();
+    if (id.includes('@')) {
+      const { error } = await sb.auth.signInWithPassword({ email: id.toLowerCase(), password });
+      if (error) throw error.message.includes('confirm') ? 'Confirm your email first, then sign in.' : 'Incorrect phone/email or password.';
+    } else {
+      const r = await callFn('phone-login', { phone: normPhone(id), password }, false);
+      const { error } = await sb.auth.setSession({ access_token: r.access_token, refresh_token: r.refresh_token });
+      if (error) throw 'Incorrect phone/email or password.';
+    }
+  },
+  async reset(email) {
+    const { error } = await sb.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: SITE_URL });
+    if (error) throw error.message;
+  },
+  async logout() { await sb.auth.signOut(); state.me = null; location.hash = '#/'; render(); }
+};
+
+async function shrinkImage(file) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.85);
+}
+
+/* =========================================================
+   Shared view pieces
+   ========================================================= */
+const V = {};
+const FAQ = [
+  ['How accurate are the predictions?', 'Across tens of thousands of simulated rounds, our neural algorithms have demonstrated a proven historical accuracy averaging 94.2%.'],
+  ['How do I get started?', 'Create a free account, buy a package, then upload a screenshot of your Virtual Football lobby to generate predictions instantly.'],
+  ['How secure is the payment system?', 'All payments and transactions are secured and handeled by Paystack.']
+];
+function head(back) {
+  return `<div class="wrap pt-5 pb-3 flex items-center gap-3">
+    ${back ? `<a href="${back}" class="w-10 h-10 rounded-full border border-[var(--line)] flex items-center justify-center" aria-label="Back">${ic('arrow-left')}</a>` : ''}
+    <img src="logo.png" alt="" class="w-10 h-10 rounded-full"><div class="font-display font-extrabold text-xl grad-text">${BRAND}</div></div>`;
+}
+function nav(active) {
+  const items = [['dashboard', 'Home', 'house'], ['packages', 'Packages', 'package'], ['predict', 'Predictions', 'brain'], ['guide', 'Guide', 'book-open'], ['about', 'About', 'info'], ['profile', 'Profile', 'user-round']];
+  return `<nav class="nav flex" aria-label="Main">${items.map(([r, l, i]) => `<a href="#/${r}" class="${active === r ? 'on' : ''}"><span class="pill">${ic(i)}</span>${l}</a>`).join('')}</nav>`;
+}
+function pageTitle(t, sub) { return `<div class="wrap pt-6"><h1 class="font-display font-bold text-3xl">${t}</h1>${sub ? `<p class="text-[var(--mute)] mt-1">${sub}</p>` : ''}</div>`; }
+function field(label, name, type = 'text', ph = '', extra = '') {
+  return `<div><label class="label" for="${name}">${label}</label><input class="input" id="${name}" name="${name}" type="${type}" placeholder="${ph}" ${extra}></div>`;
+}
+function pwField(label, name, auto) {
+  return `<div><label class="label" for="${name}">${label}</label><div class="relative"><input class="input !pr-12" id="${name}" name="${name}" type="password" autocomplete="${auto}">
+    <button type="button" data-action="togglepw" data-for="${name}" class="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center text-slate-500" aria-label="Show password">${ic('eye')}</button></div></div>`;
+}
+function phoneField(label, name, ph) {
+  return `<div><label class="label" for="${name}">${label}</label><div class="flex"><span class="flex items-center gap-1 px-3 rounded-l-[14px] border-[1.5px] border-r-0 border-[var(--line)] bg-slate-50 text-sm font-bold">+233</span><input class="input !rounded-l-none" id="${name}" name="${name}" type="tel" inputmode="tel" placeholder="${ph}"></div></div>`;
+}
+
+/* Static reviews: exactly 5, no database. Edit by hand. Stars are 1-5. */
+const REVIEWS = [
+  { name: 'Kwame A.', location: 'Accra', stars: 5, text: 'Turning GHS 100 into GHS 1,800 in a single weekend blew me away. These AI predictions are next-level!' },
+  { name: 'Sandra N.',location: 'Takoradi', stars: 5, text: 'I was doubtful at first, but the win rate speaks volumes. Strongly recommended.' },
+  { name: 'Eric B.', location: 'Kumasi', stars: 5, text: 'Effortlessly user-friendly with blazing-fast analysis. Best platform for instant football tips.' },
+  { name: 'Emma A.', location: 'Accra', stars: 5, text: 'The AI predictions are remarkably accurate, and my payouts have doubled.' },
+  { name: 'Akua M.', location: 'Kumasi', stars: 5, text: 'Simple to navigate and lightning-fast—the ultimate platform' }
+];
+const AVATARS = [
+  'linear-gradient(135deg,#fbbf24,#d97706)', // amber
+  'linear-gradient(135deg,#a855f7,#7c3aed)', // purple
+  'linear-gradient(135deg,#10b981,#047857)', // green
+  'linear-gradient(135deg,#f43f5e,#be123c)', // rose
+  'linear-gradient(135deg,#38bdf8,#0369a1)'  // blue
+];
+function starRow(n, cls = '!w-[18px] !h-[18px]') {
+  return [1, 2, 3, 4, 5].map(i => ic('star', (i <= n ? 'star-on' : 'star-off') + ' ' + cls)).join('');
+}
+  const ACTIVE_USERS = '15,000+'; // EDIT: type your real active-user count, e.g. '1,250' or '2K+'
+function reviewsBlock() {
+  const list = REVIEWS.slice(0, 5);
+  const avg = list.reduce((a, r) => a + r.stars, 0) / list.length;
+  const pct = Math.round(list.filter(r => r.stars >= 4).length / list.length * 100);
+  return `<section id="reviews" class="wrap mt-10">
+    <div class="eyebrow">${ic('messages-square')} COMMUNITY</div>
+    <h2 class="font-display font-bold text-3xl mt-1">What users are saying</h2>
+    <div class="card mt-4 py-4 grid grid-cols-3 text-center">
+      <div><div class="font-display font-bold text-2xl flex items-center justify-center gap-1.5">${avg.toFixed(1)} <span class="star-on">${ic('star', 'star-on i-lg')}</span></div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)] mt-1">AVERAGE RATING</div></div>
+      <div class="border-x border-[var(--line)]"><div class="font-display font-bold text-2xl">${ACTIVE_USERS}</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)] mt-1">ACTIVE USERS</div></div>
+      <div><div class="font-display font-bold text-2xl">${pct}%</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)] mt-1">RATED 4+</div></div>
+    </div>
+    <div class="mt-3 space-y-3">${list.map((r, k) => `<div class="card p-4">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-full flex-none flex items-center justify-center text-white font-display font-bold text-lg" style="background:${AVATARS[k % AVATARS.length]}">${esc((r.name.trim()[0] || '?').toUpperCase())}</div>
+        <div class="flex-1 min-w-0"><div class="font-display font-bold truncate">${esc(r.name)}</div><div class="text-xs text-[var(--mute)] flex items-center gap-1">${ic('map-pin', '!w-3.5 !h-3.5')}<span class="truncate">${esc(r.location)}</span></div></div>
+        <div class="flex gap-0.5 flex-none">${starRow(r.stars)}</div>
+      </div>
+      <p class="text-sm italic text-slate-600 mt-3">\u201C${esc(r.text)}\u201D</p></div>`).join('')}</div>
+  </section>`;
+}
+
+function contactBlock() {
+  const s = CONFIG.support;
+  return `<div class="rounded-3xl p-5 mt-4" style="background:#f3e8ff;border:1.5px solid #e9d5ff">
+    <div class="font-display font-bold flex items-center gap-2">${ic('headset', 'text-purple-700')} Official contact</div>
+    <div class="mt-3 space-y-2.5 text-[15px]">
+      <a class="flex items-center gap-2" href="https://wa.me/${s.whatsapp}" target="_blank" rel="noopener"><span class="text-emerald-600">${ic('message-circle')}</span> WhatsApp: <b>+${s.whatsapp}</b></a>
+      <a class="flex items-center gap-2" href="https://t.me/${s.telegram}" target="_blank" rel="noopener"><span class="text-sky-500">${ic('send')}</span> Telegram: <b>@${s.telegram}</b></a>
+      <a class="flex items-center gap-2" href="mailto:${s.email}"><span class="text-purple-600">${ic('mail')}</span> Email: <b>${s.email}</b></a>
+    </div></div>`;
+}
+
+function aboutBlock() {
+  return `
+  <section class="wrap mt-10 text-center">
+    <span class="chip" style="color:#7c3aed;background:#faf5ff;border-color:#e9d5ff">${ic('badge-info')} ABOUT US</span>
+    <h2 class="font-display font-bold text-[28px] mt-4 leading-tight">Ghana's Leading Virtual AI Predictor</h2>
+    <p class="text-[var(--mute)] mt-3 text-[15px]">Developed by data engineers and quantitative sports analysts, providing members with an institutional-grade statistical advantage in virtual football.</p>
+  </section>
+  <section class="wrap mt-6">
+    <div class="dark-card p-5 grid grid-cols-3 text-center gap-2">
+      <div><div class="font-display font-bold text-2xl text-purple-300">15000+</div><div class="text-xs text-slate-400 mt-1">Active Members</div></div>
+      <div><div class="font-display font-bold text-2xl text-emerald-300">94.5%</div><div class="text-xs text-slate-400 mt-1">Win Rate</div></div>
+      <div><div class="font-display font-bold text-2xl text-amber-300">GH₵ 250k+</div><div class="text-xs text-slate-400 mt-1">Total Won</div></div>
+    </div>
+    <div class="mt-4 space-y-3">
+      ${[['brain', '#f5f3ff', '#7c3aed', 'Neural Prediction Engine', 'Analyzes live virtual round fixtures against a database of historical Monte Carlo simulations in seconds.'],
+         ['shield-check', '#ecfdf5', '#059669', 'Security & Integrity', 'Advanced AES-256 encryption, fully transparent odds computation, and complete compliance with responsible gaming practices.'],
+         ['headset', '#eff6ff', '#0284c7', '24/7 Priority Support', '24/7 support from a dedicated customer intelligence team on WhatsApp, Telegram and Email to assist all active members.']]
+        .map(([i, bg, col, t, d]) => `<div class="card p-4 flex gap-4"><div class="w-12 h-12 rounded-2xl flex-none flex items-center justify-center" style="background:${bg};color:${col}">${ic(i, 'i-lg')}</div><div><div class="font-display font-bold">${t}</div><p class="text-sm text-[var(--mute)] mt-1">${d}</p></div></div>`).join('')}
+    </div>
+    <div class="card p-5 mt-4">
+      <div class="font-display font-bold flex items-center gap-2">${ic('trophy', 'text-amber-500')} Supported Virtual Leagues</div>
+      <p class="text-sm text-[var(--mute)] mt-1 mb-3">Our AI continuously tracks and evaluates 7 major virtual football competitions:</p>
+      <div class="flex flex-wrap gap-2">${['England Premier|crown', 'Spain La Liga|star', 'Italy Serie A|shield', 'Germany Bundesliga|zap', 'Champions League|trophy', 'Euros|globe', 'Club World Cup|globe-2'].map(x => { const [n, i] = x.split('|'); return `<span class="chip">${ic(i, 'text-purple-600')}${n}</span>`; }).join('')}</div>
+    </div>
+    <div class="card p-5 mt-4">
+      <div class="font-display font-bold flex items-center gap-2 mb-1">${ic('circle-help', 'text-purple-600')} Frequently asked questions</div>
+      <div class="mt-3 space-y-2">${FAQ.map(([q, a]) => `<div class="faq card !rounded-2xl"><button data-action="faq" class="w-full flex justify-between items-center text-left p-4 font-semibold text-[15px]">${q}<span class="chev text-purple-600">${ic('chevron-down')}</span></button><p class="faq-a px-4 pb-4 text-sm text-[var(--mute)]">${a}</p></div>`).join('')}</div>
+    </div>
+    ${contactBlock()}
+  </section>`;
+}
+
+function footer() {
+  return `<footer class="wrap mt-8 pb-10">
+    <div class="flex items-center justify-center gap-3 flex-wrap"><img src="logo.png" alt="" class="w-9 h-9 rounded-full"><span class="font-display font-bold tracking-wide uppercase">${BRAND}</span><span class="chip text-xs">18+ ONLY &middot; PLAY RESPONSIBLY</span></div>
+    <div class="mt-4 rounded-2xl p-4" style="background:#fffbeb;border:1.5px solid #fde68a;border-left:5px solid #f59e0b">
+      <div class="font-display font-bold flex items-center gap-2" style="color:#92400e">${ic('triangle-alert')} Financial advisory &amp; risk notice</div>
+      <p class="text-sm mt-2" style="color:#78350f">The insights generated by this platform are informational and represent AI-based statistical estimates. Because virtual and sporting events are subject to probabilistic variance, <b>absolute accuracy cannot be guaranteed, and losses are an inherent possibility – and are part of the game.</b></p>
+      <p class="text-sm mt-2" style="color:#78350f">All financial decisions are undertaken at your sole discretion and risk. Consider seeking guidance from a qualified financial professional if necessary, and only stake funds that you are fully prepared to lose.</p>
+    </div>
+    <p class="text-center text-xs text-[var(--mute)] mt-5">&copy; 2026 ${BRAND} Ghana. All Rights Reserved. Registered & Encrypted Platform.</p>
+  </footer>`;
+}
+
+function walletCard(u, variant = 'dash') {
+  const bal = (cls, bg, bd, tileBg, tileIc, label, val, lc) => `<div class="rounded-2xl p-3 flex items-center gap-3 ${cls}" style="background:${bg};border:1.5px solid ${bd}">
+    <div class="w-11 h-11 rounded-full flex-none flex items-center justify-center text-white" style="background:${tileBg}">${ic(tileIc)}</div>
+    <div><div class="text-[10px] font-extrabold tracking-wider" style="color:${lc}">${label}</div><div class="font-display font-bold text-xl">${val}</div></div></div>`;
+  if (variant === 'plain') {
+    return `<div class="rounded-[26px] p-5" style="background:linear-gradient(180deg,#ffffff,#faf5ff);border:1.5px solid #e9d5ff;box-shadow:0 10px 30px -14px rgba(124,58,237,.35)">
+      <div class="flex items-center justify-between gap-3">
+        <div><div class="text-[11px] font-extrabold tracking-wider text-purple-700 flex items-center gap-1.5">${ic('wallet', '!w-4 !h-4')} SPENDABLE WALLET CASH</div><div class="font-display font-bold text-4xl mt-1">${money(u.cash)}</div></div>
+        <div class="flex items-center gap-2 flex-none"><a href="#/deposit" class="btn btn-primary !py-2.5 !px-4 text-sm">${ic('plus')} Deposit</a><a href="#/profile" class="w-11 h-11 rounded-full border border-[var(--line)] bg-white flex items-center justify-center text-slate-500" aria-label="History">${ic('history')}</a></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-purple-100">
+        ${bal('', '#fffbeb', '#fde68a', 'linear-gradient(135deg,#fbbf24,#d97706)', 'coins', 'COINS BALANCE', u.coins.toLocaleString(), '#b45309')}
+        ${bal('', '#faf5ff', '#e9d5ff', 'linear-gradient(135deg,#a855f7,#7c3aed)', 'gem', 'VIP DIAMONDS', u.diamonds.toLocaleString(), '#7c3aed')}
+      </div></div>`;
+  }
+  return `<div class="rounded-[26px] overflow-hidden" style="border:1.5px solid #e9d5ff;box-shadow:0 10px 30px -14px rgba(124,58,237,.45)">
+    <div class="p-4 text-white flex items-center gap-3" style="background:linear-gradient(135deg,#a855f7,#6d28d9)">
+      <div class="w-12 h-12 rounded-2xl bg-slate-900 flex-none flex items-center justify-center">${ic('wallet', 'i-lg')}</div>
+      <div class="flex-1 min-w-0"><div class="text-xs font-bold opacity-90">Spendable Wallet Balance</div><div class="font-display font-bold text-3xl truncate">${money(u.cash)}</div></div>
+      <a href="#/deposit" class="btn !py-2.5 !px-4 text-sm bg-slate-900 text-white flex-none">Deposit ${ic('plus')}</a>
+    </div>
+    <div class="bg-white p-3 flex items-center gap-2.5">
+      <div class="w-10 h-10 rounded-xl flex-none bg-amber-50 text-amber-600 flex items-center justify-center">${ic('coins')}</div>
+      <div><div class="text-[10px] font-extrabold tracking-wider text-[var(--mute)]">COINS BALANCE</div><div class="font-display font-bold leading-tight">${u.coins.toLocaleString()}</div></div>
+      <span class="w-px h-8 bg-[var(--line)]"></span>
+      <div class="w-10 h-10 rounded-xl flex-none bg-purple-50 text-purple-600 flex items-center justify-center">${ic('gem')}</div>
+      <div><div class="text-[10px] font-extrabold tracking-wider text-[var(--mute)]">VIP DIAMONDS</div><div class="font-display font-bold leading-tight">${u.diamonds.toLocaleString()}</div></div>
+      <a href="#/packages" class="ml-auto chip !bg-white font-bold text-xs whitespace-nowrap">Get Tokens <span class="w-5 h-5 rounded-full grad text-white flex items-center justify-center">${ic('plus', '!w-3 !h-3')}</span></a>
+    </div></div>`;
+}
+function lobbyBanner() {
+  return `<div class="dark-card p-4 flex items-center gap-3" style="border:1px solid #334155">
+    <img src="instant-virtuals.png" alt="Instant Virtuals" class="w-14 h-14 rounded-2xl flex-none object-cover">
+    <div class="flex-1 min-w-0"><div class="flex gap-2 text-[11px] font-bold"><span class="px-2 py-0.5 rounded bg-red-500/20 text-red-300">SPORTYBET LIVE</span><span class="text-sky-300">Official Games Lobby</span></div>
+    <div class="font-display font-bold mt-1">Play On SportyBet Virtuals</div><p class="text-xs text-slate-400">Visit SportyBet's official match fixtures and place your AI picks now.</p></div>
+    <a href="${CONFIG.lobbyUrl}" target="_blank" rel="noopener" class="w-11 h-11 rounded-full bg-red-500 flex items-center justify-center flex-none" aria-label="Open SportyBet">${ic('external-link')}</a></div>`;
+}
+
+/* =========================================================
+   Pages
+   ========================================================= */
+V.landing = () => `
+  <div class="relative overflow-hidden">
+    <div class="absolute -top-14 -right-16 w-72 h-72 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>
+    <div class="wrap pt-5 relative">
+      <div class="flex items-center gap-3 rounded-full px-4 py-3 border-[1.5px] border-purple-200" style="background:linear-gradient(90deg,#faf5ff,#f3e8ff)">
+        <img src="logo.png" alt="" class="w-10 h-10 rounded-full flex-none">
+        <span class="font-display font-extrabold text-purple-700 tracking-wide text-[15px]">${BRAND}</span>
+        <span class="hidden min-[430px]:block w-px h-5 bg-purple-200"></span><span class="hidden min-[430px]:block text-[13px] font-semibold text-[var(--mute)]">Instant Virtuals</span>
+      </div>
+      <h1 class="font-display font-bold text-[34px] leading-[1.15] mt-8">Simply upload an Instant Football screenshot and let our <span class="grad-text">AI instantly analyze the matches </span>displayed to deliver accurate predictions.</h1>
+      <p class="text-[var(--mute)] mt-4 text-[17px]">Purely data-driven algorithmic analytics. No guessing.</p>
+      <div class="flex flex-wrap gap-2 mt-4">
+        <span class="chip">${ic('zap', 'text-purple-600')} Instant Analyses</span>
+        <span class="chip">${ic('chart-line', 'text-purple-600')} 94% Verified Picks</span>
+        <span class="chip" style="background:#fef2f2;color:#b91c1c;border-color:#fecaca">${ic('ban')} 18+ ONLY</span>
+      </div>
+      <div class="flex items-center gap-3 mt-7 flex-wrap">
+        <a href="#/register" class="btn btn-primary">GET STARTED ${ic('wand-sparkles')}</a>
+        <a href="#/login" class="btn btn-ghost">${ic('log-in')} SIGN IN</a>
+        <a href="#reviews" data-action="scroll" data-target="reviews" class="font-semibold text-[var(--mute)] flex items-center gap-1">See reviews ${ic('chevron-right')}</a>
+      </div>
+      <div class="grid grid-cols-3 gap-3 mt-8">
+        ${[['users', '#f5f3ff', '#9333ea', '15000+', 'WINNERS'], ['trophy', '#fffbeb', '#d97706', 'GH₵ 250K+', 'TOTAL WON'], ['chart-line', '#ecfdf5', '#059669', '94%', 'WIN RATE']]
+          .map(([i, bg, c, n, l], k) => `<div class="card py-4 text-center ${k === 1 ? '!bg-purple-50 !border-purple-200' : ''}"><div class="w-10 h-10 mx-auto rounded-xl flex items-center justify-center" style="background:${bg};color:${c}">${ic(i)}</div><div class="font-display font-bold text-lg mt-2">${n}</div><div class="text-[11px] font-bold tracking-wider text-[var(--mute)]">${l}</div></div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <section class="wrap mt-10">
+    <div class="rounded-[28px] p-5 text-center" style="background:linear-gradient(180deg,#ecfdf5,#d1fae5);border:1.5px solid #a7f3d0">
+      <span class="chip" style="background:#fff;color:#047857;border-color:#a7f3d0">${ic('brain')} NEURAL ODDS READER PREVIEW</span>
+      <h2 class="font-display font-bold text-2xl mt-3 text-emerald-900">Instant Football Fixture Scanner</h2>
+      <p class="text-emerald-800 text-[15px] mt-2">Simply take a screenshot of your match lobby on your mobile device (as shown below), and our algorithm will compute a 94.5% winning probability in seconds.</p>
+      <div class="relative mx-auto mt-5 w-44 rounded-[26px] p-1.5 bg-slate-800 shadow-xl" style="transform:rotate(3deg)">
+        <div class="rounded-[20px] overflow-hidden bg-slate-900" style="aspect-ratio:498/964"><img src="lobby.jpg" alt="Instant Football lobby screenshot" class="w-full h-full object-cover object-top" loading="lazy"></div>
+      </div>
+      <div class="inline-flex items-center gap-2 bg-slate-900 text-white text-xs font-semibold rounded-full px-3 py-2 -mt-3 relative"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>Reads: England, Spain, Germany &amp; more</div>
+      <div class="mt-4"><a href="#/predict" class="btn btn-green">${ic('wand-sparkles')} TRY INSTANT PREDICTOR ${ic('arrow-right')}</a></div>
+    </div>
+  </section>
+
+  <section class="wrap mt-8">
+    <div class="rounded-[28px] p-5" style="background:#f8fafc;border:1.5px solid var(--line)">
+      <div class="eyebrow">${ic('route')} PROCESS</div>
+      <h2 class="font-display font-bold text-3xl mt-1">How it works</h2>
+      <p class="text-[var(--mute)] mt-1">4 simple steps.</p>
+      <div class="mt-4 space-y-3">
+        ${[['gamepad-2', '#f5f3ff', '#7c3aed', 'Open Instant Football', 'Go to the Instant Football virtual games lobby on your device.'],
+           ['camera', '#f5f3ff', '#7c3aed', 'Take a screenshot', 'Capture the matches displayed on your screen.'],
+           ['cpu', '#f5f3ff', '#7c3aed', 'Upload for analysis', 'Our AI analyzes the fixtures and computes predictive numbers instantly.'],
+           ['circle-check', '#ecfdf5', '#059669', 'View your results', 'Get instant predictions, then place your bets with confidence.']]
+          .map(([i, bg, c, t, d], k) => `<div class="card p-4 flex gap-3 items-center"><span class="font-display font-bold text-slate-400 w-6">0${k + 1}</span><div class="w-12 h-12 rounded-2xl flex-none flex items-center justify-center" style="background:${bg};color:${c}">${ic(i, 'i-lg')}</div><div><div class="font-display font-bold">${t}</div><p class="text-sm text-[var(--mute)]">${d}</p></div></div>`).join('')}
+      </div>
+    </div>
+  </section>
+
+  ${reviewsBlock()}
+
+  <section class="wrap mt-8">
+    ${lobbyBanner()}
+    <div class="dark-card p-6 mt-4 text-center">
+      <h3 class="font-display font-bold text-2xl">Ready to play smarter?</h3>
+      <p class="text-slate-300 text-[15px] mt-2">Join thousands of players using AI-powered virtual football predictions.</p>
+      <a href="#/register" class="btn btn-primary w-full mt-5">GET STARTED – FREE ${ic('arrow-right')}</a>
+      <p class="text-sm text-slate-400 mt-4">Already have an account? <a href="#/login" class="text-purple-300 font-bold underline">Log In</a></p>
+    </div>
+  </section>
+  ${aboutBlock()}${footer()}`;
+
+V.register = () => `${head('#/')}
+  <main class="wrap pb-12">
+    <h1 class="font-display font-bold text-3xl mt-2">Create account</h1>
+    <p class="text-[var(--mute)] mt-1">Currency: Ghana Cedi (GH\u20B5).</p>
+    <form data-form="register" class="card p-5 mt-5 space-y-4" novalidate>
+      ${field('First name', 'first', 'text', 'Kwame', 'autocomplete="given-name"')}
+      ${field('Other name (optional)', 'other', 'text', '', 'autocomplete="additional-name"')}
+      ${field('Surname', 'last', 'text', 'Mensah', 'autocomplete="family-name"')}
+      ${field('Email address', 'email', 'email', 'you@example.com', 'autocomplete="email"')}
+      ${phoneField('Phone number', 'phone', '24 123 4567')}
+      ${pwField('Password (min 6 characters)', 'password', 'new-password')}
+      ${pwField('Confirm password', 'confirm', 'new-password')}
+      <label class="flex gap-3 items-start text-sm"><input type="checkbox" name="terms" class="mt-1 w-4 h-4 accent-purple-600"> <span>I agree to the Terms &amp; Conditions and confirm I am 18 or older.</span></label>
+      <p id="formErr" class="text-sm font-semibold text-red-600 hidden"></p>
+      <button class="btn btn-primary w-full" type="submit">Create Account</button>
+    </form>
+    <p class="text-center text-sm text-[var(--mute)] mt-5">Already registered? <a href="#/login" class="font-bold text-purple-700">Sign in</a></p>
+  </main>`;
+
+V.login = () => {
+  return `${head('#/')}
+  <main class="wrap pb-12">
+    <h1 class="font-display font-bold text-3xl mt-2">Welcome back</h1>
+    <p class="text-[var(--mute)] mt-1">Sign in with your phone number or email.</p>
+    <form data-form="login" class="card p-5 mt-5 space-y-4" novalidate>
+      <div><label class="label" for="identifier">Phone number or email address</label>
+        <div class="flex"><span class="flex items-center px-3 rounded-l-[14px] border-[1.5px] border-r-0 border-[var(--line)] bg-slate-50 text-sm font-bold">+233</span>
+        <input class="input !rounded-l-none" id="identifier" name="identifier" type="text" autocomplete="username" placeholder="24 123 4567 or email"></div></div>
+      <div><div class="flex justify-between items-center"><label class="label" for="password">Password</label><button type="button" data-action="forgot" class="text-xs font-bold text-purple-700 mb-1.5">FORGOT</button></div>
+        <div class="relative"><input class="input !pr-12" id="password" name="password" type="password" autocomplete="current-password">
+        <button type="button" data-action="togglepw" data-for="password" class="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center text-slate-500" aria-label="Show password">${ic('eye')}</button></div></div>
+      <label class="flex gap-3 items-center text-sm font-semibold"><input type="checkbox" name="remember" class="w-4 h-4 accent-purple-600"> Remember me</label>
+      <p id="formErr" class="text-sm font-semibold text-red-600 hidden"></p>
+      <button class="btn btn-primary w-full" type="submit">Sign in</button>
+    </form>
+    <div id="forgotBox" class="card p-5 mt-4 hidden">
+      <div class="font-display font-bold">Reset password</div>
+      <p class="text-sm text-[var(--mute)] mt-1">Password resets are sent by email only. Enter the email on your account.</p>
+      <input id="resetEmail" class="input mt-3" type="email" placeholder="you@example.com">
+      <button data-action="reset" class="btn btn-primary w-full mt-3">Send reset link</button>
+    </div>
+    <p class="text-center text-sm text-[var(--mute)] mt-5">New here? <a href="#/register" class="font-bold text-purple-700">Create an account</a></p>
+  </main>`;
+};
+
+V.reset = () => `${head('')}
+  <main class="wrap pb-12">
+    <h1 class="font-display font-bold text-3xl mt-2">Set a new password</h1>
+    <form data-form="reset" class="card p-5 mt-5 space-y-4" novalidate>
+      ${pwField('New password (min 6 characters)', 'password', 'new-password')}
+      ${pwField('Confirm new password', 'confirm', 'new-password')}
+      <p id="formErr" class="text-sm font-semibold text-red-600 hidden"></p>
+      <button class="btn btn-primary w-full" type="submit">Save password</button>
+    </form>
+  </main>`;
+
+const PRESETS = [100, 200, 300, 500];
+const initials = u => esc((u.first_name[0] || '') + (u.last_name[0] || ''));
+const blob = '<div class="absolute -top-16 -right-16 w-64 h-64 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>';
+const miniPhone = '<div class="w-24 rounded-[18px] p-1 bg-slate-800 shadow-lg flex-none self-start"><div class="rounded-[14px] overflow-hidden bg-slate-900" style="aspect-ratio:498/964"><img src="lobby.jpg" alt="Instant Football lobby" class="w-full h-full object-cover object-top" loading="lazy"></div></div>';
+
+/* Three stat blocks: same layout and colours as the reference, but every number is real. */
+function statBlocks() {
+  const items = [
+    ['chart-line', 'linear-gradient(180deg,#ecfdf5,#d1fae5)', '#86efac', '#059669', STATS.readings, 'AI WIN RATE'],
+    ['trophy', 'linear-gradient(180deg,#fffbeb,#fef3c7)', '#fcd34d', '#d97706', STATS.topped, 'TOTAL WON'],
+    ['users', 'linear-gradient(180deg,#fff1f2,#ffe4e6)', '#fda4af', '#e11d48', STATS.members, 'ACTIVE USERS']
+  ];
+  return `<div class="grid grid-cols-3 gap-3">${items.map(([i, bg, bd, c, n, l]) => `<div class="rounded-[22px] py-4 px-1.5 text-center" style="background:${bg};border:1.5px solid ${bd}">
+    <div class="w-10 h-10 mx-auto rounded-xl bg-white/70 flex items-center justify-center" style="color:${c}">${ic(i)}</div>
+    <div class="font-display font-bold text-[16px] mt-2 leading-tight">${n}</div>
+    <div class="text-[10px] font-extrabold tracking-wider mt-1" style="color:${c}">${l}</div></div>`).join('')}</div>`;
+}
+
+V.dashboard = u => `
+  <div class="relative overflow-hidden">
+    ${blob}
+    <div class="wrap pt-5 relative flex items-center justify-between">
+      <div class="flex items-center gap-3"><img src="logo.png" alt="" class="w-12 h-12 rounded-full shadow">
+        <div class="font-display font-bold text-xl">Welcome ${esc(u.first_name)}!</div></div>
+      <button class="relative w-11 h-11 rounded-full bg-white border border-[var(--line)] flex items-center justify-center" data-action="bell" aria-label="Notifications">${ic('bell')}${u.tx.some(t => t.status === 'pending') ? '<span class="absolute top-2 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full"></span>' : ''}</button>
+    </div>
+    <div class="wrap mt-4 relative">${walletCard(u, 'dash')}</div>
+    <div class="wrap mt-4 relative">${statBlocks(u)}</div>
+  </div>
+
+  <section class="wrap mt-7">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-display font-bold text-xl flex items-center gap-2"><span class="text-orange-500">${ic('flame', 'i-lg')}</span> Available Tools</h2>
+      <a href="#/predict" class="chip font-bold">View All ${ic('arrow-right')}</a>
+    </div>
+    <a href="#/predict" class="block rounded-[24px] p-4" style="background:linear-gradient(180deg,#ecfdf5,#d1fae5);border:1.5px solid #86efac">
+      <div class="flex gap-4">
+        <div class="w-14 h-14 rounded-2xl flex-none flex items-center justify-center text-white shadow" style="background:linear-gradient(135deg,#10b981,#047857)">${ic('brain', 'i-lg')}</div>
+        <div class="flex-1">
+          <div class="font-display font-extrabold tracking-wide text-emerald-900 uppercase text-[16px] leading-tight">Instant Virtuals Prediction</div>
+          <span class="inline-flex items-center gap-1 text-xs font-bold text-white bg-emerald-600 rounded-full px-2.5 py-1 mt-1.5">${ic('circle-check', '!w-3.5 !h-3.5')} 94% Verified</span>
+          <p class="text-sm text-emerald-900/80 mt-2">Advanced Algorithmic analysis of virtual matches, instantly Unlocks verified Over/Under, 1X2, and Multi-Goal predictions in seconds.</p>
+          <div class="font-display font-bold text-emerald-800 mt-2 flex items-center gap-1">Open Instant Predictions ${ic('arrow-right')}</div>
+        </div>
+      </div>
+    </a>
+    <div class="rounded-[24px] p-4 mt-3" style="background:linear-gradient(180deg,#fff1f2,#ffe4e6);border:1.5px solid #fda4af">
+      <div class="flex gap-4">
+        <div class="w-14 h-14 rounded-2xl flex-none flex items-center justify-center text-white shadow" style="background:linear-gradient(135deg,#f43f5e,#be123c)">${ic('refresh-cw', 'i-lg')}</div>
+        <div class="flex-1">
+          <div class="flex justify-between items-start gap-2"><div class="font-display font-extrabold tracking-wide text-rose-900 uppercase text-[16px]">Spin the Bottle</div><span class="text-[11px] font-bold text-white bg-rose-500 rounded-full px-2.5 py-1 whitespace-nowrap">Coming soon</span></div>
+          <p class="text-sm text-rose-900/80 mt-2">An interactive bottle roulette tool is planned. It is not available yet.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap mt-4 grid grid-cols-3 gap-3">
+    ${[['book-open', '#ede9fe', '#7c3aed', 'How To Play', '#/guide'], ['star', '#fef3c7', '#f59e0b', 'Feedback', '#/feedback'], ['triangle-alert', '#fee2e2', '#ef4444', 'Report Issue', '#/report']]
+      .map(([i, bg, c, l, h]) => `<a href="${h}" class="card py-4 text-center text-sm font-bold"><div class="w-12 h-12 mx-auto rounded-2xl flex items-center justify-center mb-2" style="background:${bg};color:${c}">${ic(i)}</div>${l}</a>`).join('')}
+  </section>
+
+  <section class="wrap mt-7">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-display font-bold text-xl flex items-center gap-2"><span class="text-amber-500">${ic('lightbulb', 'i-lg')}</span> Pro AI Insights & Strategy</h2>
+      <a href="#/guide" class="chip !bg-emerald-50 !text-emerald-700 !border-emerald-200 font-bold">Live Tips</a>
+    </div>
+    <div class="card p-4" style="background:linear-gradient(180deg,#ffffff,#f8fafc)">
+      <div class="flex gap-4">
+        ${miniPhone}
+        <div>
+          <div class="font-display font-bold text-lg">Algorithmic Match Selection</div>
+          <p class="text-sm text-[var(--mute)] mt-1">Our advanced neural engine analyzes historical form, head-to-head matchups, and goal probabilities drawing from thousands of benchmarked fixtures.</p>
+          <div class="text-sm font-semibold mt-3 space-y-1.5">
+            <div class="flex gap-2 items-center text-emerald-700">${ic('circle-check')} High-Confidence Markets: 1X2 and Over 2.5</div>
+            <div class="flex gap-2 items-center text-purple-700">${ic('gem')} VIP Diamonds: Real-time Multipier </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-cols-3 gap-3 mt-3">
+      ${[['shield-check', '#059669', '94.5% Win Rate', 'Verified Picks'], ['zap', '#2563eb', 'Neural Engine', 'Instant Results'], ['badge-check', '#d97706', '24/7 Auto Credit', 'Instant MoMo']]
+        .map(([i, c, t, s]) => `<div class="card py-4 text-center"><div class="flex justify-center" style="color:${c}">${ic(i)}</div><div class="font-display font-bold text-[13px] mt-1">${t}</div><div class="text-[11px] text-[var(--mute)]">${s}</div></div>`).join('')}
+    </div>
+  </section>
+
+  <section class="wrap mt-6">
+    ${lobbyBanner()}
+  </section>
+  <div class="h-20"></div>`;
+
+V.packages = u => {
+  const coins = state.packTab === 'coins', list = coins ? COIN_PACKS : DIAMOND_PACKS;
+  const tile = coins ? 'linear-gradient(135deg,#fde68a,#fbbf24)' : 'linear-gradient(135deg,#ede9fe,#c4b5fd)', fg = coins ? '#b45309' : '#7c3aed';
+  return `<div class="relative overflow-hidden">
+    ${blob}
+    <div class="wrap pt-5 relative flex items-center justify-between">
+      <div class="flex items-center gap-3"><img src="logo.png" alt="" class="w-12 h-12 rounded-full shadow">
+        <div class="font-display font-bold text-xl">Welcome ${esc(u.first_name)}!</div></div>
+      <button class="w-11 h-11 rounded-full bg-white border border-[var(--line)] flex items-center justify-center" data-action="bell" aria-label="Notifications">${ic('bell')}</button>
+    </div>
+    <div class="wrap mt-5 relative"><h1 class="font-display font-bold text-[28px] leading-tight">Coins &amp; Diamonds Packages</h1>
+      <p class="text-[var(--mute)] mt-1">Deposit cash to your wallet and buy coins or VIP diamonds, or pay for a package straight from MoMo.</p></div>
+    <div class="wrap mt-4 relative">${walletCard(u, 'plain')}</div>
+  </div>
+  <div class="wrap mt-5"><div class="grid grid-cols-2 gap-1 p-1.5 rounded-full" style="background:#eef0f7">
+    <button data-action="packtab" data-v="coins" class="btn !py-3 text-sm ${coins ? '!bg-white shadow text-slate-900' : '!bg-transparent text-slate-500'}"><span class="text-amber-500">${ic('coins')}</span> Coins Packages</button>
+    <button data-action="packtab" data-v="diamonds" class="btn !py-3 text-sm ${!coins ? '!bg-white shadow text-slate-900' : '!bg-transparent text-slate-500'}"><span class="text-purple-600">${ic('gem')}</span> Diamonds (VIP)</button>
+  </div></div>
+  <div class="wrap mt-5 space-y-4">${list.map(p => `
+    <div class="rounded-[22px] p-4" style="${p.popular ? 'background:linear-gradient(135deg,#faf5ff,#f3e8ff);border:1.5px solid #c084fc' : 'background:#fff;border:1.5px solid var(--line)'}">
+      <div class="flex items-center gap-3">
+        <div class="w-14 h-14 rounded-2xl flex-none flex items-center justify-center shadow-sm" style="background:${tile};color:${fg}">${ic(coins ? 'coins' : 'gem', 'i-lg')}</div>
+        <div class="flex-1 min-w-0"><div class="font-display font-bold text-[17px] leading-tight">${p.name}</div><p class="text-[13px] text-[var(--mute)] mt-0.5">${p.desc}</p></div>
+        <div class="relative flex-none">
+          ${p.popular ? '<span class="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[10px] font-extrabold text-white px-2.5 py-0.5 rounded-full" style="background:linear-gradient(135deg,#fbbf24,#f97316)">POPULAR</span>' : ''}
+          <div class="font-display font-bold text-white text-sm px-4 py-3 rounded-full bg-slate-900 whitespace-nowrap">${money(p.price)}</div>
+        </div>
+      </div>
+      <div class="mt-3 space-y-2">
+        <button data-action="buy" data-id="${p.id}" class="btn btn-primary w-full !py-3 text-sm">${ic('wallet')} Buy with wallet balance</button>
+        <button data-action="paypack" data-id="${p.id}" class="btn w-full !py-3 text-sm bg-slate-900 text-white">${ic('smartphone')} Pay with MoMo</button>
+      </div>
+    </div>`).join('')}</div>
+  <p class="wrap text-xs text-[var(--mute)] mt-4">Paying with MoMo uses secure Paystack checkout (MTN MoMo and Telecel Cash) and credits your account automatically. Or <a href="#/deposit" class="font-bold text-purple-700">add cash to your wallet</a> first.</p>
+  <div class="h-28"></div>`;
+};
+
+V.deposit = u => {
+  const recent = u.tx.filter(t => t.reference).slice(0, 5);
+  return `${head('#/dashboard')}
+  <main class="wrap pb-32">
+    <h1 class="font-display font-bold text-3xl">Deposit</h1>
+    <p class="text-[var(--mute)] mt-1">Add cash to your wallet with mobile money. Your balance updates automatically once the payment succeeds.</p>
+    <div class="mt-4">${walletCard(u, 'plain')}</div>
+    <div class="card p-5 mt-4 space-y-4">
+      <div><span class="label">Choose an amount (GH\u20B5)</span>
+        <div class="grid grid-cols-4 gap-2">${PRESETS.map(a => `<button data-action="preset" data-v="${a}" class="rounded-2xl py-3 text-sm font-bold border-[1.5px] border-[var(--line)] bg-white">${a}</button>`).join('')}</div></div>
+      <div><label class="label" for="depAmount">Or enter an amount</label><input id="depAmount" class="input" type="number" min="100" max="5000" inputmode="decimal" placeholder="100"></div>
+      <div class="rounded-2xl bg-slate-50 p-3 text-sm flex gap-2 text-slate-700"><span class="text-emerald-600 flex-none">${ic('shield-check')}</span><span>Secure checkout by Paystack for MTN MoMo and Telecel Cash. You approve the payment on your phone.</span></div>
+      <p id="formErr" class="text-sm font-semibold text-red-600 hidden"></p>
+      <button data-action="paydeposit" class="btn btn-primary w-full">${ic('smartphone')} Pay with MoMo</button>
+    </div>
+    ${recent.length ? `<div class="card p-5 mt-4"><div class="font-display font-bold mb-2">Recent payments</div>
+      ${recent.map(t => `<div class="py-2.5 flex items-center justify-between gap-3 border-b border-[var(--line)] last:border-0"><div class="min-w-0"><div class="text-sm font-semibold truncate">${esc(t.label)}</div><div class="text-xs text-[var(--mute)]">${esc(t.reference)} &middot; ${fmtDate(t.created_at)}</div></div><span class="status-${t.status} text-[11px] font-bold px-2 py-0.5 rounded-full capitalize">${t.status}</span></div>`).join('')}
+      <button data-action="refresh" class="btn btn-ghost w-full mt-3 !py-2.5 text-sm">${ic('refresh-cw')} Check payment status</button></div>` : ''}
+  </main>${nav('')}`;
+};
+
+function tierRow(t, kind) {
+  const badgeClass = t.n === 5 ? 'background:#fef3c7;color:#92400e;border-color:#fde68a' : 'background:#ecfdf5;color:#047857;border-color:#a7f3d0';
+  return `<button data-action="pickTier" data-id="${t.id}" class="card p-4 flex items-center gap-4 text-left w-full relative ${t.tag ? '!border-purple-400' : ''}">
+    ${t.tag ? `<span class="tag">${t.tag}</span>` : ''}
+    <div class="w-14 h-14 rounded-2xl flex-none flex items-center justify-center shadow" style="background:${t.tile};color:${t.fg}">${ic(t.icon, 'i-lg')}</div>
+    <div class="flex-1 min-w-0">
+      <div class="flex justify-between items-start gap-2"><div class="font-display font-bold text-lg">${t.amount.toLocaleString()} ${kind === 'coins' ? 'Coins' : 'Diamonds'}</div>
+        <span class="text-[11px] font-bold px-2 py-1 rounded-lg border whitespace-nowrap" style="${badgeClass}">${t.n} MATCH${t.n > 1 ? 'ES' : ''}</span></div>
+      <p class="text-sm text-[var(--mute)]">${t.name} &middot; ${t.n} ${t.desc.toLowerCase()}</p>
+    </div>${ic('chevron-right', 'text-purple-600 flex-none')}</button>`;
+}
+
+function matchCard(m, detailed) {
+  const an = m.analysis;
+  if (!an) return '';
+  const a = { odds: [m.odds.home, m.odds.draw, m.odds.away].map(Number), p: an.p, margin: an.margin, ou: an.ou };
+  const keys = ['home', 'draw', 'away'];
+  const pickIdx = keys.indexOf(an.pick); // 0 for Home, 1 for Draw, 2 for Away
+  const cap = ['Home', 'Draw', 'Away'], hd = ['1', 'X', '2'];
+  const seg = ['#22c55e', '#f59e0b', '#6d28d9'], txt = ['#16a34a', '#d97706', '#6d28d9'];
+  
+  // Dynamic colors: Home = Green, Away = Purple, Draw = Amber
+  const isAway = pickIdx === 2;
+  const isDraw = pickIdx === 1;
+  
+  const themeColor = isAway ? '#7c3aed' : (isDraw ? '#d97706' : '#10b981');
+  const themeBg = isAway ? 'linear-gradient(135deg,#7c3aed,#5b21b6)' : (isDraw ? 'linear-gradient(135deg,#d97706,#b45309)' : 'linear-gradient(135deg,#059669,#047857)');
+  const boxBg = isAway ? '#faf5ff' : (isDraw ? '#fffbeb' : '#ecfdf5');
+  const badgeBg = isAway ? '#7c3aed' : (isDraw ? '#d97706' : '#10b981');
+  
+  const team = (t, full) => `<div class="text-center min-w-[84px] max-w-[110px]"><div class="rounded-2xl px-3 py-3 font-display font-bold text-xl bg-slate-50" style="border:1.5px solid #eef0f6">${esc(t)}</div>${full ? `<div class="text-[11px] text-slate-500 mt-1 leading-tight">${esc(full)}</div>` : ''}</div>`;
+  const leagueName = m.league ? (/league|cup|champions|euro/i.test(m.league) ? m.league : m.league + ' Virtual League') : 'Virtual football';
+  const ouBadge = a.ou ? `Under ${a.ou.line} Goals` : `Margin ${a.margin.toFixed(1)}%`;
+
+  return `<div class="rounded-[22px] p-4 bg-white" style="border:1.5px solid #e6e8f2;border-left:4px solid ${themeColor};box-shadow:0 12px 26px -20px rgba(15,18,38,.45)">
+    <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5 text-sm font-bold text-slate-700 flex-1 min-w-0"><span class="text-purple-700 flex-none">${ic('trophy', '!w-4 !h-4')}</span><span class="truncate">${esc(leagueName)}</span></div>
+      <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg whitespace-nowrap" style="background:#ede9fe;color:#5b21b6">Match ${m.match_no}</span>
+      <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 whitespace-nowrap" style="background:${boxBg};color:${isAway ? '#6b21a8' : (isDraw ? '#92400e' : '#15803d')}">${ic('check-circle', '!w-3.5 !h-3.5')} ${an.confidence}% Confidence</span>
+    </div>
+    
+    <div class="flex items-center justify-between mt-4">
+      ${team(m.home, m.home_full)}
+      <div class="text-center"><div class="w-9 h-9 rounded-full bg-slate-900 text-white text-xs font-bold flex items-center justify-center mx-auto">VS</div><div class="text-[10px] font-extrabold tracking-wider text-purple-700 mt-1">1X2</div></div>
+      ${team(m.away, m.away_full)}
+    </div>
+
+    <div class="grid grid-cols-3 gap-2.5 mt-4">
+      ${[0, 1, 2].map(i => {
+        const isPick = i === pickIdx;
+        return `<div class="rounded-2xl py-3 text-center relative" style="${isPick ? `background:${boxBg};border:2px solid ${themeColor};box-shadow:0 4px 12px rgba(0,0,0,0.06)` : 'background:#fff;border:1.5px solid #eef0f6'}">
+          ${isPick ? `<span class="absolute -top-3 left-1/2 -translate-x-1/2 text-[9px] font-extrabold text-white px-2 py-0.5 rounded-full uppercase tracking-wider" style="background:${badgeBg}">${hd[i]} ✓ PICK</span>` : ''}
+          <div class="flex items-center justify-center gap-1 text-xs font-bold text-slate-500">${hd[i]}</div>
+          <div class="font-display font-bold text-xl mt-0.5">${a.odds[i].toFixed(2)}</div>
+          <div class="text-[11px] text-slate-400">${cap[i]}</div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div class="flex h-1.5 rounded-full overflow-hidden mt-4" style="gap:2px">
+      ${a.p.map((v, i) => `<span style="flex:${v};background:${seg[i]}"></span>`).join('')}
+    </div>
+    <div class="flex justify-between text-[11px] font-bold mt-1.5">
+      ${a.p.map((v, i) => `<span style="color:${txt[i]}">${hd[i]} (${cap[i]}): ${v.toFixed(0)}%</span>`).join('')}
+    </div>
+
+    <div class="rounded-2xl mt-4 p-3.5 flex items-center gap-3 text-white" style="background:${themeBg}">
+      <div class="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center flex-none">${ic('sparkles', 'i-lg')}</div>
+      <div class="flex-1 min-w-0">
+        <div class="text-[10px] font-extrabold tracking-wider opacity-90 flex items-center gap-1">${ic('percent', '!w-3 !h-3')} PREDICTED OUTCOME</div>
+        <div class="font-display font-extrabold text-lg leading-tight">${an.predicted_outcome}</div>
+      </div>
+      <span class="text-xs font-bold rounded-lg px-2.5 py-1.5 bg-white/15 whitespace-nowrap">${ouBadge}</span>
+    </div>
+    
+    ${detailed ? `<div class="mt-3 text-sm text-[var(--mute)] flex flex-wrap gap-x-4 gap-y-1"><span>Bookmaker margin: <b class="text-slate-800">${a.margin.toFixed(1)}%</b></span><span>Spread: <b class="text-slate-800">${an.spread}</b></span></div>` : ''}
+  </div>`;
+}
+
+function readingText() {
+  const lines = P.result.map(m => {
+    const an = m.analysis; if (!an) return '';
+    const o = [m.odds.home, m.odds.draw, m.odds.away].map(x => Number(x).toFixed(2)).join(' / ');
+    const pickName = an.pick ? an.pick.toUpperCase() : 'HOME';
+    return `${m.match_no}) ${m.home} vs ${m.away}${m.league ? ' (' + m.league + ')' : ''}  1X2: ${o}  implied: ${an.p.map(v => v.toFixed(0) + '%').join(' / ')}  pick: ${pickName}`;
+  }).filter(Boolean);
+  return `${BRAND} reading ${P.reference}\n${lines.join('\n')}\nThese figures describe the odds, not the result.`;
+}
+
+async function copyToClipboard(text) {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (err) {}
+  
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.top = '0';
+    ta.style.left = '0';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const successful = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return successful;
+  } catch (e) {
+    return false;
+  }
+                                                                                                     }
+
+V.predict = u => {
+  const header = `<div class="relative overflow-hidden"><div class="absolute -top-16 -right-16 w-60 h-60 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>
+    <div class="wrap pt-5 relative flex items-start gap-3">
+      <a href="#/dashboard" class="w-11 h-11 rounded-full bg-white border border-[var(--line)] flex items-center justify-center flex-none" aria-label="Back">${ic('arrow-left')}</a>
+      <div class="flex-1"><h1 class="font-display font-bold text-2xl">Predictions Hub</h1>
+        <span class="chip !bg-emerald-50 !text-emerald-700 !border-emerald-200 text-xs mt-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>95% Accuracy</span></div>
+      <button data-action="bell" class="w-11 h-11 rounded-full bg-white border border-[var(--line)] flex items-center justify-center flex-none" aria-label="Notifications">${ic('bell')}</button>
+    </div>
+    <div class="wrap mt-4 relative"><div class="card p-3 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">${ic('coins')}</div><div><div class="text-[10px] font-bold tracking-wider text-[var(--mute)]">COINS BALANCE</div><div class="font-display font-bold">${u.coins.toLocaleString()}</div></div>
+      <span class="w-px h-8 bg-[var(--line)]"></span>
+      <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">${ic('gem')}</div><div><div class="text-[10px] font-bold tracking-wider text-[var(--mute)]">VIP DIAMONDS</div><div class="font-display font-bold">${u.diamonds.toLocaleString()}</div></div>
+      <a href="#/packages" class="ml-auto chip !bg-white font-bold">Get Tokens <span class="w-5 h-5 rounded-full grad text-white flex items-center justify-center">${ic('plus', '!w-3 !h-3')}</span></a>
+    </div></div>
+    <div class="wrap mt-4 relative"><div class="grid grid-cols-3 gap-1 p-1.5 rounded-full bg-slate-100">
+      <button class="btn !py-2.5 text-sm !bg-white shadow">${ic('brain', 'text-purple-700')} Instant</button>
+      <button data-action="soon" class="btn !py-2.5 text-sm !bg-transparent text-slate-500">${ic('refresh-cw')} Spin Bottle</button>
+      <button data-action="soon" class="btn !py-2.5 text-sm !bg-transparent text-slate-500">${ic('plane')} Aviator <span class="text-[9px] bg-red-500 text-white px-1.5 py-0.5 rounded">SOON</span></button>
+    </div></div></div>`;
+  let body = '';
+  if (P.step === 'tiers') {
+    body = `<div class="wrap mt-6"><h2 class="font-display font-bold text-2xl flex items-center gap-2">${ic('layers', 'text-purple-600 i-lg')} Select Your Prediction Tier</h2>
+      <p class="text-[var(--mute)] mt-1 text-[15px]">Plans are ranked by AI accuracy & number of predictions unlocked. Pick one to continue.</p>
+      <div class="grid grid-cols-2 gap-1 p-1.5 rounded-full bg-slate-100 mt-4">
+        <button data-action="ptab" data-v="coins" class="btn !py-2.5 text-sm ${P.kind === 'coins' ? '!bg-white shadow' : '!bg-transparent text-slate-500'}">${ic('coins', 'text-amber-500')} Coins Plans</button>
+        <button data-action="ptab" data-v="diamonds" class="btn !py-2.5 text-sm ${P.kind === 'diamonds' ? '!bg-white shadow' : '!bg-transparent text-slate-500'}">${ic('gem', 'text-purple-600')} VIP Diamonds</button>
+      </div>
+      <div class="mt-5 space-y-4">${TIERS[P.kind].map(t => tierRow(t, P.kind)).join('')}</div></div>
+      <div class="wrap mt-6">${lobbyBanner()}</div>`;
+  } else if (P.step === 'scanning') {
+    body = `<div class="wrap mt-6">
+      <div class="rounded-[24px] p-3" style="border:2px dashed #c4b5fd;background:#faf5ff">
+        <div class="relative rounded-2xl overflow-hidden bg-slate-900"><img src="${P.dataUrl}" alt="" class="mx-auto block opacity-90" style="max-height:260px"><div class="scanline"></div></div>
+      </div>
+      <div class="mt-4 rounded-2xl py-4 text-white font-display font-extrabold tracking-wide flex items-center justify-center gap-2.5" style="background:linear-gradient(135deg,#a855f7,#6d28d9);box-shadow:0 14px 28px -12px rgba(124,58,237,.7)"><span class="spin flex">${ic('loader')}</span> SCANNING SCREENSHOT...</div>
+      <div class="mt-4 rounded-[24px] p-5 text-center bg-white" style="border:1.5px solid #7dd3fc;box-shadow:0 14px 30px -20px rgba(14,165,233,.5)">
+        <div id="scanIcon"><div class="ring text-sky-700">${ic('brain', '!w-8 !h-8')}</div></div>
+        <div id="scanTitle" class="font-display font-bold text-lg mt-4">Scanning screenshot...</div>
+        <span id="scanPill" class="inline-block text-xs font-bold rounded-lg px-3 py-1.5 mt-2" style="background:#dcfce7;color:#15803d">Neural Vision Engine Active</span>
+        <div class="bar mt-5" style="height:8px"><span id="scanBar" style="width:0%;background:linear-gradient(90deg,#2563eb,#4f46e5,#10b981)"></span></div>
+        <div class="flex items-center justify-between text-xs font-bold text-slate-500 mt-2"><span id="scanPct">0%</span><span id="scanStatus" class="flex items-center gap-1.5">Uploading screenshot...</span></div>
+        <div class="dots"><span></span><span></span><span></span><span></span></div>
+      </div>
+      </div>`;
+  } else if (P.step === 'upload') {
+    const t = P.tier;
+    body = `<div class="wrap mt-6">
+      <div class="card p-4 flex items-center gap-3 !border-purple-300 !bg-purple-50">
+        <div class="w-12 h-12 rounded-2xl flex-none flex items-center justify-center" style="background:${t.tile};color:${t.fg}">${ic(t.icon)}</div>
+        <div class="flex-1"><div class="font-display font-bold">${t.name} &middot; ${t.amount.toLocaleString()} ${P.kind}</div><p class="text-xs text-[var(--mute)]">Returns ${t.n} randomly chosen match${t.n > 1 ? 'es' : ''} from the 1X2 fixtures in your screenshot</p></div>
+        <button data-action="changetier" class="text-sm font-bold text-purple-700">Change</button></div>
+      <label id="drop" class="drop block p-6 text-center cursor-pointer mt-4" for="file">
+        ${P.dataUrl ? `<img src="${P.dataUrl}" alt="Selected screenshot" class="max-h-64 mx-auto rounded-xl">` : `<div class="w-14 h-14 mx-auto rounded-2xl bg-white text-purple-600 flex items-center justify-center shadow">${ic('image-up', 'i-lg')}</div><div class="font-display font-bold mt-3">Upload match screenshot</div><p class="text-sm text-[var(--mute)] mt-1">Drag and drop, or tap to pick from your gallery.<br>PNG, JPG or WEBP</p>`}
+        <input id="file" type="file" accept="image/png,image/jpeg,image/webp" class="hidden"></label>
+      <p class="text-xs text-[var(--mute)] mt-2">Tip: open the 1X2 tab and capture the fixture list with the 1 / X / 2 odds visible. Other markets (1X2-1UP, 1X2-2UP, O/U) are not supported.</p>
+      ${P.error ? `<p class="text-sm font-semibold text-red-600 mt-3">${esc(P.error)}</p>` : ''}
+      <button data-action="scan" class="btn btn-primary w-full mt-4" ${P.dataUrl ? '' : 'disabled'}>${ic('wand-sparkles')} Scan screenshot</button>
+      ${P.dataUrl ? '<button data-action="clearimg" class="btn btn-ghost w-full mt-2 !py-3 text-sm">Remove screenshot</button>' : ''}</div>`;
+  } else if (P.step === 'result') {
+    const avg = P.avgMargin == null ? '-' : Number(P.avgMargin).toFixed(1);
+    body = `<div class="wrap mt-6 space-y-3">
+      <div class="flex items-center justify-between gap-2"><h2 class="font-display font-bold text-xl">Your readings</h2><span class="chip text-xs">${esc(P.tier.name)} &middot; ${P.found} fixtures read</span></div>
+      ${P.result.map(m => matchCard(m, P.resultKind === 'diamonds')).join('')}
+      <div class="card p-4 flex items-center gap-3"><div class="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic('trending-up')}</div><div><div class="text-[11px] font-extrabold tracking-wider text-[var(--mute)]">AVG BOOKMAKER MARGIN</div><div class="font-display font-bold text-xl">${avg}%</div></div></div>
+      <div class="card p-4 flex items-center gap-3"><div class="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic('ticket')}</div><div class="flex-1"><div class="text-[11px] font-extrabold tracking-wider text-[var(--mute)]">READING REFERENCE</div><div class="font-display font-bold text-xl text-purple-800">${esc(P.reference)}</div></div><button data-action="copycode" class="chip font-bold">${ic('copy')} Copy</button></div>
+      <button data-action="copyslip" class="btn btn-green w-full">${ic('clipboard-copy')} Copy reading summary</button>
+      <button data-action="newread" class="btn btn-ghost w-full">${ic('rotate-ccw')} New reading</button></div>`;
+  }
+  return header + body + '<div class="h-28"></div>';
+};
+
+/* ---------- shared page header: logo + welcome row, then title ---------- */
+function welcomeRow(u) {
+  return `<div class="wrap pt-5 relative flex items-center justify-between">
+    <div class="flex items-center gap-3"><img src="logo.png" alt="" class="w-12 h-12 rounded-full shadow"><div class="font-display font-bold text-xl">Welcome ${esc(u.first_name)}!</div></div>
+    <button class="w-11 h-11 rounded-full bg-white border border-[var(--line)] flex items-center justify-center" data-action="bell" aria-label="Notifications">${ic('bell')}</button></div>`;
+}
+function pageHead(u, title, sub, icon, iconCls) {
+  const t = `<h1 class="font-display font-bold text-[28px] leading-tight flex items-center gap-2"><span class="${iconCls}">${ic(icon, 'i-lg')}</span> ${title}</h1><p class="text-[var(--mute)] mt-1">${sub}</p>`;
+  if (!u) return head('#/') + `<div class="wrap mt-2">${t}</div>`;
+  return `<div class="relative overflow-hidden">${blob}${welcomeRow(u)}<div class="wrap mt-4 relative">${t}</div></div>`;
+}
+
+/* ---------- Guide ---------- */
+const GUIDE_STEPS = [
+  ['gamepad-2', 'Open Instant Football Games Lobby', 'Log into your bookmaker or virtual games provider and open the Instant Football lobby on your phone.'],
+  ['camera', 'Capture The Match Round Screen', 'Take a screenshot of the fixture screen with the 1, X and 2 odds visible for every match.'],
+  ['cpu', 'Choose An Instant AI Tier And Upload', 'Go to Predictions, pick a coins or diamonds tier, upload your screenshot.'],
+  ['circle-check', 'Place Your Bet & Pick Profits', 'Enter the AI-recommended pick on your ticket. Maintain disciplined financial control (e.g. 5-10% of total stake per round).']
+];
+V.guide = u => `${pageHead(u, 'How To Play & Win', 'Master the Instant Football Lobby with our 4-step easy workflow.', 'book-open', 'text-purple-600')}
+  <div class="wrap mt-5 space-y-3">
+    ${GUIDE_STEPS.map(([i, t, d], k) => {
+      const last = k === 3;
+      return `<div class="rounded-[22px] p-4 flex gap-3 items-center" style="${last ? 'background:linear-gradient(180deg,#ecfdf5,#d1fae5);border:1.5px solid #6ee7b7' : 'background:#fff;border:1.5px solid #e2e5f0;box-shadow:0 6px 18px -12px rgba(15,18,38,.25)'}">
+        <span class="font-display font-bold w-7 flex-none ${last ? 'text-emerald-700' : 'text-slate-400'}">0${k + 1}</span>
+        <div class="w-12 h-12 rounded-2xl flex-none flex items-center justify-center shadow-sm" style="${last ? 'background:linear-gradient(135deg,#10b981,#047857);color:#fff' : 'background:#f5f3ff;color:#7c3aed'}">${ic(i, 'i-lg')}</div>
+        <div class="min-w-0"><div class="font-display font-bold text-[17px] leading-tight ${last ? 'text-emerald-900' : ''}">${t}</div><p class="text-sm mt-1 ${last ? 'text-emerald-900/80' : 'text-[var(--mute)]'}">${d}</p></div></div>`;
+    }).join('')}
+    <div class="rounded-[22px] p-5 mt-1" style="background:linear-gradient(180deg,#faf5ff,#f3e8ff);border:1.5px solid #d8b4fe">
+      <div class="font-display font-bold flex items-center gap-2"><span class="text-purple-600">${ic('lightbulb')}</span> Pro Tip </div>
+      <p class="text-sm text-slate-700 mt-2">Home Win and Over 2.5 Goals picks boast our highest consistency rate of 94.5%. For steady, long-term gains, combine 2–3 unlocked picks in a daily accumulator.</p>
+    </div>
+  </div>
+  <div class="h-32"></div>${u ? nav('guide') : ''}`;
+
+/* ---------- About ---------- */
+V.about = u => {
+  const side = (col, bg, ic1, t, d) => `<div class="card p-4 flex gap-4" style="border-left:4px solid ${col};border-top-left-radius:22px;border-bottom-left-radius:22px"><div class="w-12 h-12 rounded-2xl flex-none flex items-center justify-center" style="background:${bg};color:${col}">${ic(ic1, 'i-lg')}</div><div><div class="font-display font-bold text-lg">${t}</div><p class="text-sm text-[var(--mute)] mt-1">${d}</p></div></div>`;
+  const step = (col, bg, ic1, n, t, d) => `<div class="card p-4" style="border-top:4px solid ${col}"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-xl flex-none flex items-center justify-center" style="background:${bg};color:${col}">${ic(ic1)}</div><div class="font-display font-bold text-[17px] flex-1 leading-tight">${t}</div><span class="text-[11px] font-extrabold px-2.5 py-1 rounded-lg" style="background:${bg};color:${col}">STEP ${n}</span></div><p class="text-sm text-[var(--mute)] mt-3">${d}</p></div>`;
+  return `<div class="relative overflow-hidden">${blob}${u ? welcomeRow(u) : head('#/')}</div>
+  <section class="wrap mt-4">
+    <div class="rounded-[26px] p-6 text-center text-white" style="background:linear-gradient(160deg,#0b0d1f,#1e1b4b 60%,#3b0f4f);border:1.5px solid #6d28d9;box-shadow:0 20px 40px -20px rgba(109,40,217,.7)">
+      <img src="logo.png" alt="${BRAND} logo" class="w-28 h-28 rounded-full mx-auto shadow-lg" style="box-shadow:0 0 0 4px rgba(168,85,247,.25),0 12px 30px -8px rgba(168,85,247,.6)">
+      <span class="inline-flex items-center gap-2 mt-4 text-[11px] font-extrabold tracking-wider rounded-full px-3 py-1.5" style="background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.5);color:#e9d5ff">${ic('brain', '!w-3.5 !h-3.5')} NEURAL • GHANA'S LEADING VIRTUAL FOOTBALL AI</span>
+      <h1 class="font-display font-bold text-[28px] mt-3 leading-tight">About ${BRAND}</h1>
+      <p class="text-slate-300 text-[15px] mt-3">Ghana's premier AI-powered sports intelligence platform, built by data scientists and football algorithm experts to deliver an institutional statistical edge on virtual matches.</p>
+    </div>
+    <div class="mt-4 space-y-3">
+      ${side('#7c3aed', '#f5f3ff', 'target', 'Our Mission', 'To make advanced quantitative sports analytics accessible to everyone by providing high-confidence, institutional-quality AI forecasts once restricted exclusively to quantitative hedge funds and elite betting syndicates.')}
+      ${side('#10b981', '#ecfdf5', 'compass', 'Our Vision', 'To build Ghana leading predictive sports ecosystem, expanding our real-time neural modeling network to serve over 1,000,000 active winning members across the country.')}
+      ${side('#0ea5e9', '#f0f9ff', 'cpu', 'Our Neural Prediction Engine', 'Powered by real-time Monte Carlo simulations and extensive historical team matrices, our engine computes precise 1X2 market probabilities, performance variances, and volatility ratings in seconds.')}
+      ${side('#f59e0b', '#fffbeb', 'shield-check', 'Security, Integrity & Compliance', 'Every user session and account token is safeguarded via comprehensive end-to-end AES-256 SSL encryption. We are deeply committed to maintaining rigorous standards of responsible gaming, transparency, and data privacy protection.')}
+    </div>
+    <h2 class="font-display font-bold text-xl mt-7 flex items-center gap-2"><span class="text-purple-600">${ic('workflow', 'i-lg')}</span> How Our AI Engine Works</h2>
+    <div class="mt-3 space-y-3">
+      ${step('#7c3aed', '#f5f3ff', 'scan-line', '01', 'Screenshot Ingestion', 'Upload a screenshot of the Instant Football lobby. The reader identifies the league, the team pairings, active leagues, odds and upcoming round parameters.')}
+      ${step('#0ea5e9', '#f0f9ff', 'table-2', '02', 'Thousands Monte Carlo Simulations', 'The core models thousands virtual match simulations factoring team power indices, home-away advantages, scoring patterns, and historical probability variance.')}
+      ${step('#10b981', '#ecfdf5', 'chart-pie', '03', 'High-Confidence 1X2 Prediction Slip', 'Produces a practical prediction ticket detailing the core match outcome (Home 1, Draw X, Away 2) alongside high-accuracy confidence metrics ranging from 90% to 98%.')}
+    </div>
+    <div class="card p-5 mt-5">
+      <div class="font-display font-bold flex items-center gap-2">${ic('trophy', 'text-amber-500')} Supported Virtual Football Leagues</div>
+      <p class="text-sm text-[var(--mute)] mt-1 mb-3">Our neural models are trained and updated continuously on 7 major virtual football competitions:</p>
+      <div class="flex flex-wrap gap-2">${['England Virtual Premier League|crown|#7c3aed', 'Spain Virtual La Liga|star|#f59e0b', 'Italy Virtual Serie A|shield|#0284c7', 'Germany Virtual Bundesliga|zap|#ef4444', 'Champions League|trophy|#10b981', 'European Championship (Euros)|globe|#3b82f6', 'Global Club World Cup|globe-2|#7c3aed'].map(x => { const [n, i, c] = x.split('|'); return `<span class="chip font-bold" style="background:#fff"><span style="color:${c};display:flex">${ic(i)}</span>${n}</span>`; }).join('')}</div>
+    </div>
+    <div class="rounded-[26px] p-5 mt-4" style="background:linear-gradient(160deg,#0b0d1f,#1e1b4b);border:1.5px solid #3b2f8f;box-shadow:0 18px 36px -18px rgba(30,27,75,.8)">
+  <div class="font-display font-bold text-white text-center flex items-center justify-center gap-2"><span style="color:#a78bfa;display:flex">${ic('chart-line')}</span> Verified Platform Performance</div>
+  <div class="grid grid-cols-3 gap-2.5 mt-4">
+    ${[[PLATFORM.members, 'Active Members', '#c084fc'], [PLATFORM.leagues, 'Win Accuracy', '#34d399'], [PLATFORM.readings, 'Winnings', '#fbbf24']]
+      .map(([n, l, c]) => `<div class="rounded-2xl px-2 py-4 text-center" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)">
+        <div class="font-display font-bold text-2xl leading-tight break-words" style="color:${c}">${n}</div>
+        <div class="text-xs text-slate-300 mt-1.5">${l}</div></div>`).join('')}
+  </div>
+</div>
+    <div class="card p-5 mt-4">
+      <div class="font-display font-bold flex items-center gap-2 mb-1">${ic('circle-help', 'text-purple-600')} Frequently asked questions</div>
+      <div class="mt-3 space-y-2">${FAQ.map(([q, a]) => `<div class="faq card !rounded-2xl"><button data-action="faq" class="w-full flex justify-between items-center text-left p-4 font-semibold text-[15px]">${q}<span class="chev text-purple-600">${ic('chevron-down')}</span></button><p class="faq-a px-4 pb-4 text-sm text-[var(--mute)]">${a}</p></div>`).join('')}</div>
+    </div>
+    ${contactBlock()}
+  </section>
+  ${footer()}<div class="h-20"></div>${u ? nav('about') : ''}`;
+};
+
+/* ---------- Feedback ---------- */
+V.feedback = u => `${pageHead(u, 'Feedback', 'Tell us what is working and what we should improve.', 'star', 'text-amber-500')}
+  <div class="wrap mt-5">
+    <div class="card p-5">
+      <div class="font-display font-bold flex items-center gap-2">${ic('message-square-plus', 'text-purple-600')} Share your feedback</div>
+      <p class="text-xs text-[var(--mute)] mt-1">Your message goes straight to the developer. It is not shown publicly.</p>
+      <div class="flex gap-1 mt-3">${[1, 2, 3, 4, 5].map(i => `<button data-action="star" data-v="${i}" class="p-1" aria-label="${i} stars">${ic('star', (i <= state.fbRating ? 'star-on' : 'star-off') + ' i-lg')}</button>`).join('')}</div>
+      <textarea id="fbText" class="input mt-3" rows="4" maxlength="1000" placeholder="Tell us about your experience">${esc(state.fbDraft)}</textarea>
+      <button data-action="sendfeedback" class="btn btn-primary w-full mt-3 !py-3">${ic('send')} Send feedback</button>
+    </div>
+  </div><div class="h-32"></div>`;
+
+/* ---------- Report an Issue ---------- */
+const ISSUE_TYPES = ['Payment / Deposit approval delay', 'Coins or diamonds not credited', 'Screenshot scan failed or unreadable', 'Login or account problem', 'Something else'];
+V.report = u => {
+  const s = CONFIG.support;
+  const lbl = t => `<label class="block text-[11px] font-extrabold tracking-wider text-slate-500 mb-1.5 mt-4 first:mt-0" for="${t[0]}">${t[1]}</label>`;
+  return `${pageHead(u, 'Report an Issue', 'Tell us what went wrong and we will reply by email.', 'triangle-alert', 'text-red-500')}
+  <div class="wrap mt-5">
+    <div class="rounded-[24px] p-5" style="background:linear-gradient(180deg,#fff1f2,#ffe4e6);border:1.5px solid #fda4af;box-shadow:0 14px 30px -18px rgba(244,63,94,.5)">
+      ${lbl(['issueType', 'SELECT ISSUE TYPE'])}
+      <select id="issueType" class="input !rounded-full !bg-white">${ISSUE_TYPES.map(t => `<option>${t}</option>`).join('')}</select>
+      ${lbl(['issueRef', 'REFERENCE / TRANSACTION ID (OPTIONAL)'])}
+      <input id="issueRef" class="input !rounded-full !bg-white" placeholder="e.g. IV8F3A21C94D7B2E or match name">
+      ${lbl(['issueDesc', 'ISSUE DESCRIPTION'])}
+      <textarea id="issueDesc" class="input !rounded-2xl !bg-white" rows="4" maxlength="1500" placeholder="Please describe what happened in detail..."></textarea>
+      <button data-action="sendticket" class="btn w-full mt-5 text-white" style="background:linear-gradient(135deg,#ef4444,#b91c1c);box-shadow:0 12px 24px -10px rgba(185,28,28,.65)">Open Support Ticket ${ic('shield')}</button>
+    </div>
+    <div class="card p-5 mt-4">
+      <div class="font-display font-bold">Direct Support Channels</div>
+      <div class="mt-3 space-y-2.5 text-[15px]">
+        <a class="flex items-center gap-2" href="https://wa.me/${s.whatsapp}" target="_blank" rel="noopener"><span class="text-emerald-600">${ic('message-circle')}</span> WhatsApp: <b>+${s.whatsapp}</b></a>
+        <a class="flex items-center gap-2" href="https://t.me/${s.telegram}" target="_blank" rel="noopener"><span class="text-sky-500">${ic('send')}</span> Telegram: <b>@${s.telegram}</b></a>
+      </div>
+    </div>
+  </div><div class="h-32"></div>`;
+};
+
+/* Sends a ticket or feedback to the developer's email through a form handler (Formspree-style endpoint).
+   If CONFIG.FORM_ENDPOINT is empty it falls back to opening the user's email app. */
+async function sendToDeveloper(payload) {
+  const me = state.me || {};
+  const data = {
+    name: [me.first_name, me.last_name].filter(Boolean).join(' '), email: me.email || '', phone: me.phone ? '+233' + me.phone : '',
+    user_id: me.id || '', ...payload, _subject: payload.type + ' - ' + BRAND
+  };
+  const url = CONFIG.FORM_ENDPOINT;
+  if (!url) {
+    const body = Object.entries(data).filter(([k]) => !k.startsWith('_')).map(([k, v]) => k + ': ' + v).join('\n');
+    location.href = 'mailto:' + CONFIG.support.email + '?subject=' + encodeURIComponent(data._subject) + '&body=' + encodeURIComponent(body);
+    return 'mailto';
+  }
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(data) });
+  if (!res.ok) throw 'Could not send your message. Please try again or contact us on WhatsApp.';
+  return 'sent';
+}
+
+V.profile = u => {
+  const list = u.tx.filter(t => state.txFilter === 'all' || t.status === state.txFilter);
+  return `${pageTitle('Profile')}
+  <div class="wrap mt-4">
+    <div class="card p-5">
+      <div class="flex items-center gap-4"><div class="w-16 h-16 rounded-full grad text-white flex items-center justify-center font-display font-bold text-2xl">${esc((u.first_name[0] || '') + (u.last_name[0] || ''))}</div>
+        <div><div class="font-display font-bold text-xl">${esc([u.first_name, u.other_name, u.last_name].filter(Boolean).join(' '))}</div><span class="chip text-xs !bg-emerald-50 !text-emerald-700 !border-emerald-200">${ic('badge-check')} Active License Member</span></div></div>
+      <dl class="mt-4 text-sm space-y-2.5">
+        <div class="flex justify-between"><dt class="text-[var(--mute)]">Email</dt><dd class="font-semibold">${esc(u.email)}</dd></div>
+        <div class="flex justify-between"><dt class="text-[var(--mute)]">Phone</dt><dd class="font-semibold">+233 ${esc(u.phone)}</dd></div>
+        <div class="flex justify-between"><dt class="text-[var(--mute)]">License type</dt><dd class="font-semibold text-emerald-600">Free account</dd></div>
+      </dl>
+    </div>
+    <div class="card p-5 mt-4">
+      <div class="font-display font-bold flex items-center gap-2">${ic('receipt', 'text-purple-600')} Payment &amp; deposit history</div>
+      <div class="flex gap-2 overflow-x-auto py-3">${['all', 'pending', 'successful', 'failed', 'canceled'].map(f => `<button data-action="filter" data-v="${f}" class="chip capitalize flex-none ${state.txFilter === f ? '!bg-purple-600 !text-white !border-purple-600' : ''}">${f}</button>`).join('')}</div>
+      <div class="divide-y divide-[var(--line)]">
+        ${list.length ? list.map(t => `<div class="py-3 flex items-center gap-3"><div class="flex-1 min-w-0"><div class="font-semibold text-sm truncate">${esc(t.label)}</div><div class="text-xs text-[var(--mute)]">${esc(t.reference || t.id.slice(0, 8).toUpperCase())} &middot; ${fmtDate(t.created_at)}</div></div>
+          <div class="text-right"><div class="font-bold text-sm">${t.amount < 0 ? '-' : '+'}${money(Math.abs(t.amount))}</div><span class="status-${t.status} text-[11px] font-bold px-2 py-0.5 rounded-full capitalize">${t.status}</span></div></div>`).join('') : '<p class="text-sm text-[var(--mute)] py-4 text-center">No transactions yet.</p>'}
+      </div>
+    </div>
+    <div class="card p-5 mt-4">
+      <div class="font-display font-bold flex items-center gap-2 mb-2">${ic('history', 'text-purple-600')} Recent readings</div>
+      ${u.scans.length ? u.scans.map(s => `<div class="flex justify-between text-sm py-2 border-b border-[var(--line)] last:border-0"><span class="capitalize">${s.tier.replace('_', ' ')} &middot; ${s.allowed} match${s.allowed > 1 ? 'es' : ''}</span><span class="text-[var(--mute)]">${fmtDate(s.created_at)}</span></div>`).join('') : '<p class="text-sm text-[var(--mute)]">No readings yet.</p>'}
+    </div>
+    <button data-action="logout" class="btn btn-ghost w-full mt-5 !text-red-600 !border-red-200">${ic('log-out')} Sign out of account</button>
+  </div><div class="h-28"></div>`;
+};
+
+/* =========================================================
+   Router
+   ========================================================= */
+/* =========================================================
+   Paystack checkout + live wallet updates
+   ========================================================= */
+/* =========================================================
+   Popups and Paystack checkout
+   ========================================================= */
+
+function popup({ icon = 'circle-check', tone = 'green', title, text, button = 'Continue' }) {
+  return new Promise(resolve => {
+    const t = tone === 'purple' ? ['#f5f3ff', '#7c3aed'] : ['#ecfdf5', '#059669'];
+    const bg = document.createElement('div');
+    bg.className = 'modal-bg'; bg.setAttribute('role', 'dialog'); bg.setAttribute('aria-modal', 'true');
+    bg.innerHTML = `<div class="modal"><div class="w-16 h-16 mx-auto rounded-full flex items-center justify-center" style="background:${t[0]};color:${t[1]}">${ic(icon, '!w-8 !h-8')}</div>
+      <h3 class="font-display font-bold text-2xl mt-4">${esc(title)}</h3><p class="text-[15px] text-[var(--mute)] mt-2">${esc(text)}</p>
+      <button class="btn btn-primary w-full mt-5" data-modal-ok>${esc(button)}</button></div>`;
+    document.body.appendChild(bg); lucide.createIcons();
+    const ok = bg.querySelector('[data-modal-ok]');
+    ok.addEventListener('click', () => { bg.remove(); resolve(); });
+    ok.focus();
+  });
+}
+
+/* Returns 'successful' | 'failed' | 'canceled' | 'pending'. Callers decide what to show. */
+async function confirmPayment(ref) {
+  for (let i = 0; i < 24; i++) { // MoMo approvals can take a minute
+    const r = await callFn('paystack-verify', { reference: ref });
+    if (r.status === 'successful') return 'successful';
+    if (r.status === 'failed') return 'failed';
+    await new Promise(res => setTimeout(res, 2500));
+  }
+  return 'pending';
+}
+async function pay(payload) {
+  if (typeof PaystackPop === 'undefined') throw 'Paystack could not load. Check your connection and try again.';
+  const init = await callFn('paystack-init', payload);
+  const outcome = await new Promise((resolve, reject) => {
+    new PaystackPop().resumeTransaction(init.access_code, {
+      onSuccess: () => resolve('success'),
+      onCancel: () => resolve('cancel'),
+      onError: e => reject((e && e.message) || 'The payment could not start.')
+    });
+  });
+  if (outcome === 'cancel') {
+    // Closing the pop-up marks the transaction Canceled (unless Paystack says it was actually paid).
+    try { const r = await callFn('paystack-verify', { reference: init.reference, cancel: true }); return r.status === 'successful' ? 'successful' : 'canceled'; }
+    catch { return 'canceled'; }
+  }
+  toast('Confirming your payment...');
+  return confirmPayment(init.reference);
+}
+/* Self-healing: asks the server to re-check recent unpaid-looking payments with Paystack and credit any that
+   actually succeeded (covers slow MoMo approvals and a missed webhook). Safe to run repeatedly. */
+let reconAt = 0;
+async function reconcilePayments(force) {
+  if (!force && Date.now() - reconAt < 45000) return 0;
+  reconAt = Date.now();
+  try {
+    const r = await callFn('paystack-verify', { reconcile: true });
+    if (r.credited > 0) { toast('Payment confirmed. Your account has been updated.'); await render(true); }
+    return r.credited || 0;
+  } catch { return 0; }
+}
+async function settle(status, okMsg) {
+  if (status === 'successful') toast(okMsg);
+  else if (status === 'failed') toast('The payment did not go through. You were not charged.');
+  else if (status === 'canceled') toast('Payment canceled.');
+  else toast('Still waiting for confirmation. Your balance updates automatically when it arrives.');
+  await render(true);
+}
+
+let wallet = null;
+function watchWallet(uid) {
+  if (wallet && wallet.uid === uid) return;
+  if (wallet) sb.removeChannel(wallet.ch);
+  const ch = sb.channel('wallet-' + uid)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: 'id=eq.' + uid }, () => {
+      const page = location.hash.replace(/^#\/?/, '');
+      if (['dashboard', 'packages', 'deposit', 'profile'].includes(page)) render(true);
+    })
+    .subscribe();
+  wallet = { uid, ch };
+}
+
+const PROTECTED = ['dashboard', 'packages', 'deposit', 'predict', 'profile', 'feedback', 'report'];
+const GUEST_ONLY = ['login', 'register'];
+let renderTok = 0;
+async function render(keep) {
+  const tok = ++renderTok;
+  const route = (location.hash.replace(/^#\/?/, '') || '').split('?')[0];
+  if (route === 'reviews') return;
+  let name = route === '' ? 'landing' : route;
+  if (!V[name]) name = 'landing';
+  const s = await session();
+  if (tok !== renderTok) return;
+  if (PROTECTED.includes(name) && !s) { location.hash = '#/login'; return; }
+  if (GUEST_ONLY.includes(name) && s) { location.hash = '#/dashboard'; return; }
+  let me = null;
+  if (s) { me = await loadMe(); if (!me && PROTECTED.includes(name)) { toast('Could not load your account. Check the Supabase setup.'); } }
+  if (tok !== renderTok) return;
+  if (PROTECTED.includes(name) && !me) { $('#app').innerHTML = head('') + '<div class="wrap pt-6"><p class="text-[var(--mute)]">Account data is unavailable. Make sure schema.sql has been run in Supabase, then refresh.</p></div>'; return; }
+  if (me) watchWallet(me.id);
+  const html = V[name](me);
+  const showNav = me && ['dashboard', 'packages', 'profile', 'feedback', 'report'].includes(name);
+  $('#app').innerHTML = html + (showNav ? nav(name) : '') + (name === 'predict' && me ? nav('predict') : '');
+  lucide.createIcons();
+  if (!keep) window.scrollTo(0, 0);
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  if (me && me.tx.some(t => t.reference && ['pending', 'canceled', 'failed'].includes(t.status) && new Date(t.created_at).getTime() > weekAgo)) reconcilePayments();
+}
+window.addEventListener('hashchange', () => render());
+sb.auth.onAuthStateChange(ev => {
+  if (ev === 'PASSWORD_RECOVERY') location.hash = '#/reset';
+  if (ev === 'SIGNED_OUT') { state.me = null; }
+});
+
+/* =========================================================
+   Events
+   ========================================================= */
+function showErr(m) { const e = $('#formErr'); if (e) { e.textContent = m; e.classList.toggle('hidden', !m); } }
+async function go(fn) { try { await fn(); } catch (e) { toast(msg(e)); } }
+
+document.addEventListener('submit', async e => {
+  const form = e.target.closest('form[data-form]'); if (!form) return;
+  e.preventDefault();
+  const fd = new FormData(form), type = form.dataset.form, btn = form.querySelector('[type=submit]');
+  btn.disabled = true;
+  try {
+    if (type === 'register') {
+      const live = await Auth.register({ first: fd.get('first') || '', other: fd.get('other') || '', last: fd.get('last') || '', email: fd.get('email') || '', phone: fd.get('phone') || '', password: fd.get('password') || '', confirm: fd.get('confirm') || '', terms: !!fd.get('terms') });
+      if (!live) { showErr(''); toast('Check your email to confirm your account, then sign in.'); location.hash = '#/login'; return; }
+      await loadMe();
+      await popup({ title: 'Account created!', text: 'Welcome, ' + (fd.get('first') || '').trim() + '. Your account is ready to use.', button: 'Continue' });
+      location.hash = '#/dashboard'; await render(); return;
+    } else if (type === 'login') {
+      await Auth.login(fd.get('identifier') || '', fd.get('password') || '', !!fd.get('remember'));
+      const me = await loadMe();
+      if (!me) throw 'Could not load your account. Please try again.';
+      await popup({ title: 'Login successful', text: 'Welcome back, ' + me.first_name + '!', button: 'Continue' });
+      location.hash = '#/dashboard'; await render(); return;
+    } else if (type === 'reset') {
+      const pw = fd.get('password') || '';
+      if (pw.length < 6) throw 'Password must be at least 6 characters.';
+      if (pw !== fd.get('confirm')) throw 'Passwords do not match.';
+      const { error } = await sb.auth.updateUser({ password: pw }); if (error) throw error.message;
+      toast('Password updated.');
+    }
+    location.hash = '#/dashboard'; render();
+  } catch (err) { showErr(msg(err)); }
+  btn.disabled = false;
+});
+
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-action]'); if (!b) return;
+  const a = b.dataset.action, v = b.dataset.v, u = state.me;
+  switch (a) {
+    case 'faq': b.closest('.faq').classList.toggle('open'); break;
+    case 'scroll': e.preventDefault(); document.getElementById(b.dataset.target)?.scrollIntoView({ behavior: 'smooth' }); break;
+    case 'togglepw': {
+      const inp = document.getElementById(b.dataset.for), show = inp.type === 'password';
+      inp.type = show ? 'text' : 'password';
+      b.innerHTML = ic(show ? 'eye-off' : 'eye'); b.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); lucide.createIcons(); break;
+    }
+    case 'forgot': $('#forgotBox').classList.toggle('hidden'); break;
+    case 'reset': go(async () => {
+      const em = $('#resetEmail').value;
+      if (!/^\S+@\S+\.\S+$/.test(em)) throw 'Enter a valid email address.';
+      await Auth.reset(em); toast('If that email has an account, a reset link is on its way.');
+    }); break;
+    case 'bell': toast(u && u.tx.some(t => t.status === 'pending') ? 'You have a deposit awaiting confirmation.' : 'No new notifications.'); break;
+    case 'soon': toast('This tool is coming soon.'); break;
+    case 'packtab': state.packTab = v; render(); break;
+    case 'buy': go(async () => {
+      const { error } = await sb.rpc('buy_package', { p_id: b.dataset.id });
+      if (error) throw error.message;
+      toast('Package added to your account.'); render();
+    }); break;
+    case 'preset': { const i = $('#depAmount'); if (i) i.value = v; break; }
+    case 'paydeposit': {
+      const amount = Number(($('#depAmount') || {}).value);
+      if (!(amount >= 100 && amount <= 5000)) return showErr('Enter an amount between GH\u20B5100 and GH\u20B55,000.');
+      showErr(''); b.disabled = true;
+      go(async () => { await settle(await pay({ kind: 'deposit', amount }), 'Payment received. Your balance is updated.'); }).finally(() => { b.disabled = false; });
+      break;
+    }
+    case 'paypack': b.disabled = true; go(async () => { await settle(await pay({ kind: 'package', package_id: b.dataset.id }), 'Payment received. Your package is added.'); }).finally(() => { b.disabled = false; }); break;
+    case 'refresh': reconcilePayments(true).then(n => { if (!n) toast('No new confirmed payments yet. Try again in a minute.'); }); break;
+    case 'filter': state.txFilter = v; render(); break;
+    case 'star': state.fbDraft = ($('#fbText') || {}).value || ''; state.fbRating = Number(v); render(true); break;
+    case 'sendfeedback': go(async () => {
+      const text = ($('#fbText').value || '').trim();
+      if (text.length < 5) throw 'Write a short message first.';
+      b.disabled = true;
+      try {
+        const r = await sendToDeveloper({ type: 'Feedback', rating: state.fbRating ? state.fbRating + '/5' : 'not rated', message: text });
+        toast(r === 'sent' ? 'Thank you. Your feedback was sent.' : 'Opening your email app...');
+        if (r === 'sent') { state.fbRating = 0; state.fbDraft = ''; render(true); }
+      } finally { b.disabled = false; }
+    }); break;
+    case 'sendticket': go(async () => {
+      const type = $('#issueType').value, ref = ($('#issueRef').value || '').trim(), desc = ($('#issueDesc').value || '').trim();
+      if (desc.length < 10) throw 'Describe the problem in a few words (at least 10 characters).';
+      b.disabled = true;
+      try {
+        const r = await sendToDeveloper({ type: 'Support ticket', issue_type: type, reference: ref || '-', message: desc });
+        toast(r === 'sent' ? 'Ticket sent. We will reply by email.' : 'Opening your email app...');
+        if (r === 'sent') { $('#issueRef').value = ''; $('#issueDesc').value = ''; }
+      } finally { b.disabled = false; }
+    }); break;
+    case 'logout': Auth.logout(); break;
+    /* predictions flow */
+    case 'ptab': P.kind = v; render(); break;
+    case 'pickTier': P.tier = TIERS[P.kind].find(t => t.id === b.dataset.id); P.step = 'upload'; P.error = ''; render(); break;
+    case 'changetier': P.step = 'tiers'; render(); break;
+    case 'clearimg': P.dataUrl = null; P.error = ''; render(); break;
+    case 'scan': runScan(); break;
+    case 'copycode': copyToClipboard(P.reference).then(ok => toast(ok ? 'Reference copied.' : 'Could not copy. Select and copy it manually.')); break;
+    case 'copyslip': copyToClipboard(readingText()).then(ok => toast(ok ? 'Reading summary copied.' : 'Could not copy. Try again.')); break;
+    case 'newread': Object.assign(P, { step: 'tiers', dataUrl: null, error: '', scanId: null, result: null }); render(); break;
+  }
+});
+
+async function loadFile(file) {
+  if (!file || !/^image\/(png|jpe?g|webp)$/.test(file.type)) return toast('Use a PNG, JPG or WEBP image.');
+  try { P.dataUrl = await shrinkImage(file); P.error = ''; render(); } catch { toast('Could not open that image.'); }
+}
+document.addEventListener('change', e => { if (e.target.id === 'file') loadFile(e.target.files[0]); });
+document.addEventListener('dragover', e => { const d = e.target.closest('#drop'); if (d) { e.preventDefault(); d.classList.add('over'); } });
+document.addEventListener('dragleave', e => { const d = e.target.closest('#drop'); if (d) d.classList.remove('over'); });
+document.addEventListener('drop', e => { const d = e.target.closest('#drop'); if (d) { e.preventDefault(); d.classList.remove('over'); loadFile(e.dataTransfer.files[0]); } });
+
+async function runScan() {
+  const t = P.tier;
+  P.step = 'scanning'; P.error = ''; await render();
+  const stageA = ['Uploading screenshot...', 'Reading fixture rows...', 'Checking the 1X2 market...'];
+  const stageB = ['Extracting odds...', 'Calculating implied probabilities...', 'Preparing your readings...'];
+  let pct = 0, stage = 'A';
+  const timer = setInterval(() => {
+    pct = Math.min(90, pct + Math.random() * 6 + 2);
+    const bar = $('#scanBar'), p = $('#scanPct'), st = $('#scanStatus');
+    if (bar) bar.style.width = pct + '%'; if (p) p.textContent = Math.round(pct) + '%';
+    const next = pct < 50 ? 'A' : 'B';
+    if (next !== stage) {
+      stage = next;
+      const icon = $('#scanIcon'), title = $('#scanTitle'), pill = $('#scanPill');
+      if (icon) icon.innerHTML = `<div class="w-[84px] h-[84px] rounded-[22px] mx-auto flex items-center justify-center shadow-lg" style="background:linear-gradient(135deg,#1e1b4b,#312e81);color:#facc15">${ic('zap', '!w-9 !h-9')}</div>`;
+      if (title) title.textContent = 'Connecting to the odds engine...';
+      if (pill) pill.textContent = 'Preparing your readings';
+      lucide.createIcons();
+    }
+    if (st) { const list = stage === 'A' ? stageA : stageB; st.textContent = list[Math.min(2, Math.floor((stage === 'A' ? pct : pct - 50) / (stage === 'A' ? 17 : 14)))] || list[2]; }
+  }, 350);
+
+  try {
+    // 1. Get scanned matches from your odds scanner
+    const r = await callFn('scan-odds', { action: 'scan', tier: t.id, image: P.dataUrl.split(',')[1] });
+
+    // 2. PASS MATCHES THROUGH TRUE MONTE CARLO SIMULATION
+    try {
+      const mcResponse = await callFn('predict-monte-carlo', { matches: r.matches });
+      r.matches.forEach((m, i) => {
+        const prediction = mcResponse.results[i];
+        if (prediction && prediction.source === 'monte-carlo') {
+          m.analysis = m.analysis || {};
+          m.analysis.p = prediction.p; // Updates percentages with [Home%, Draw%, Away%] from simulation
+          m.analysis.source = 'monte-carlo';
+          m.analysis.expected_goals = prediction.expected_goals;
+        }
+      });
+    } catch (mcErr) {
+      console.error('Monte Carlo simulation overlay error:', mcErr);
+    }
+
+    clearInterval(timer);
+    Object.assign(P, { scanId: r.scan_id, result: r.matches, resultKind: r.kind, reference: r.reference, found: r.found, avgMargin: r.avg_margin, step: 'result' });
+  } catch (err) {
+    clearInterval(timer);
+    P.error = msg(err); P.step = 'upload';
+  }
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
