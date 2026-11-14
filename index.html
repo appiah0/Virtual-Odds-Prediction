@@ -712,7 +712,7 @@ function matchCard(m, detailed) {
   
   const team = (t, full) => `<div class="text-center min-w-[84px] max-w-[110px]"><div class="rounded-2xl px-3 py-3 font-display font-bold text-xl bg-slate-50" style="border:1.5px solid #eef0f6">${esc(t)}</div>${full ? `<div class="text-[11px] text-slate-500 mt-1 leading-tight">${esc(full)}</div>` : ''}</div>`;
   const leagueName = m.league ? (/league|cup|champions|euro/i.test(m.league) ? m.league : m.league + ' Virtual League') : 'Virtual football';
-  const ouBadge = a.ou ? `Under ${a.ou.line} Goals` : `Margin ${a.margin.toFixed(1)}%`;
+  const ouBadge = an.ou_badge || (a.ou ? `Under ${a.ou.line} Goals` : `Margin ${a.margin.toFixed(1)}%`);
 
   return `<div class="rounded-[22px] p-4 bg-white" style="border:1.5px solid #e6e8f2;border-left:4px solid ${themeColor};box-shadow:0 12px 26px -20px rgba(15,18,38,.45)">
     <div class="flex items-center gap-2">
