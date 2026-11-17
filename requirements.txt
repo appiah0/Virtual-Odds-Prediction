@@ -1,0 +1,2 @@
+playwright>=1.44
+supabase>=2.5
