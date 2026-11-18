@@ -1,14 +1,19 @@
 """
-SportyBet virtual football scraper v3 - ZERO CONFIG (no CSS selectors).
+SportyBet virtual football scraper v4 (zero-config, regex + structure).
 
-Finds fixture rows by *content* (a block with >=3 decimal odds AND >=2
-team-name lines), finds tabs by their visible text, and parses everything
-with regex. Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-Optional env: SPORTYBET_URL, HEADLESS, SCRAPE_RESULTS
+Env (required): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+Env (optional): SPORTYBET_URL, HEADLESS, SCRAPE_RESULTS
 
-Phone-friendly debugging: every run prints a "DIAGNOSTICS" block (sample
-rows, what was/wasn't found) to the GitHub Actions log. Read it in the
-GitHub mobile app or browser - no DevTools needed.
+Fixes in v4
+ 1. Odds: tokens with 1-2 decimals are read in on-screen order. After the
+    three 1X2 odds, a one-decimal token like "2.5" is treated as the
+    Over/Under LINE (skipped, never stored as odds); the next two are
+    Over/Under; the next two (if present) are GG/NG.
+ 2. Stars: counts <svg> icons / rating-container children next to each team
+    name (nearest-name assignment, filled vs empty by colour/class).
+ 3. Results: only results whose event ID belongs to a virtual fixture we
+    already stored are accepted (real-world sports results are dropped),
+    and they UPDATE the fixture row by event_id - no standalone rows.
 """
 import asyncio
 import hashlib
@@ -23,20 +28,28 @@ from supabase import create_client
 URL = os.environ.get("SPORTYBET_URL", "https://www.sportybet.com/ng/sport/vFootball")
 HEADLESS = os.environ.get("HEADLESS", "true").lower() != "false"
 SCRAPE_RESULTS = os.environ.get("SCRAPE_RESULTS", "true").lower() != "false"
-LEAGUES = ["Germany", "Spain"]
+LEAGUES = ["Germany", "Spain"]          # target virtual leagues
 TABLE = "scraped_fixtures"
 
-# Odds are mapped sequentially in on-screen order.
-ODD_FIELDS = ["odds_home", "odds_draw", "odds_away", "odds_over_25",
-              "odds_under_25", "odds_gg", "odds_ng"]
+LEAGUE_ALIASES = [
+    ("Germany", r"germany|bundesliga"), ("Spain", r"spain|la ?liga"),
+    ("England", r"england|premier"), ("Italy", r"italy|serie ?a"),
+    ("France", r"france|ligue ?1"),
+]
+LEAGUE_HEADER_RE = "|".join(p for _, p in LEAGUE_ALIASES)
 
-ODD_PAT = r"(?<![\d.])\d{1,3}\.\d{2}(?![\d.])"
-SCORE_PAT = r"^\s*(\d{1,2})\s*[-\u2013:]\s*(\d{1,2})\s*$"   # score on its own line
+ODD_TOKEN = re.compile(r"^\d{1,3}\.\d{1,2}$")            # 1 or 2 decimals
+ODD_PAT_ANY = r"(?<![\d.])\d{1,3}\.\d{1,2}(?![\d.])"
+SCORE_PAT = r"^\s*(\d{1,2})\s*[-\u2013:]\s*(\d{1,2})\s*$"
 ID_RE = re.compile(r"ID\s*[:#]?\s*(\d+)", re.I)
 ROUND_RE = re.compile(r"(?:round|rd\.?|matchday|md)\s*[:#.]?\s*(\d{1,4})", re.I)
+# "ID <tab> Home <tab> 2:1 <tab> Away" as rendered in result tables
+RESULT_LINE = re.compile(
+    r"^\s*(\d{4,8})\s*\t+\s*(.+?)\s*\t+\s*(\d{1,2})\s*[:\-\u2013]\s*(\d{1,2})"
+    r"\s*(?:\([^)]*\))?\s*\t+\s*(.+?)\s*$")
 NOISE = re.compile(
     r"^(1|x|2|over|under|gg|ng|home|draw|away|1x2|o/u|btts|vs\.?|v|ft|ht|"
-    r"round.*|rd.*|matchday.*|id.*|\d+(\.\d+)?)$", re.I)
+    r"round.*|rd.*|matchday.*|id.*|[+\-]?\d+(\.\d+)?)$", re.I)
 
 DIAG = []
 
@@ -46,14 +59,14 @@ def log(msg):
     DIAG.append(msg)
 
 
-# ---------- in-browser row finder (pure structure + regex) ----------
+# ---------- in-browser row finder ----------
 FIND_ROWS_JS = r"""
 (args) => {
   const ODD = new RegExp(args.oddPat, 'g');
-  const SCORE = new RegExp(args.scorePat);
   const NOISE = new RegExp(args.noise, 'i');
+  const HDR = new RegExp(args.leagueRe, 'i');
   const lines = t => (t || '').split('\n').map(s => s.trim()).filter(Boolean);
-  const nameLines = L => L.filter(l => /[A-Za-z]{3,}/.test(l) && !NOISE.test(l));
+  const nameLines = L => L.filter(l => /[A-Za-z]{2,}/.test(l) && !NOISE.test(l));
   const teamNames = L => {
     const n = nameLines(L);
     if (!n.length) return [];
@@ -63,10 +76,8 @@ FIND_ROWS_JS = r"""
   const ok = el => {
     const t = el.innerText;
     if (!t || t.length > 1500) return false;
-    const L = lines(t);
-    if (teamNames(L).length < 2) return false;
-    if (args.mode === 'fixtures') return (t.match(ODD) || []).length >= 3;
-    return L.some(l => SCORE.test(l)) && (t.match(ODD) || []).length < 3;
+    if (teamNames(lines(t)).length < 2) return false;
+    return (t.match(ODD) || []).length >= 3;
   };
   const cands = [];
   for (const el of document.body.querySelectorAll('*')) {
@@ -76,48 +87,99 @@ FIND_ROWS_JS = r"""
     if (r.width === 0 || r.height === 0) continue;
     if (ok(el)) cands.push(el);
   }
-  const set = new Set(cands);
   const leaf = cands.filter(el => !cands.some(o => o !== el && el.contains(o)));
 
-  const BAD = /empty|inactive|\boff\b|outline|gr[ae]y|disabled|unfilled|blank/i;
-  const attrs = el => [el.getAttribute('class'), el.id, el.getAttribute('aria-label'),
-                       el.getAttribute('title'), el.getAttribute('alt'),
-                       el.getAttribute('src'), el.getAttribute('data-icon')].filter(Boolean).join(' ');
+  // non-interactive short headings that look like league names
+  const headers = [];
+  const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let tn;
+  while ((tn = tw.nextNode())) {
+    const t = tn.textContent.trim();
+    if (t.length < 3 || t.length > 40 || !HDR.test(t)) continue;
+    const p = tn.parentElement;
+    if (!p || p.closest('button,a,[role=tab],[role=button],nav')) continue;
+    headers.push({node: tn, text: t});
+  }
 
-  return leaf.map(row => {
+  const BAD = /empty|inactive|\boff\b|outline|gr[ae]y|disabled|unfilled|blank|unselected/i;
+  const rgb = s => { const m = (s || '').match(/\d+(\.\d+)?/g); return m ? m.slice(0, 3).map(Number) : null; };
+  const isGray = c => !c || (Math.max(...c) - Math.min(...c) < 20);
+  const isEmptyIcon = el => {
+    const cls = (el.getAttribute('class') || '') + ' ' + (el.id || '') + ' ' + (el.getAttribute('aria-label') || '');
+    if (BAD.test(cls)) return true;
+    const cs = getComputedStyle(el);
+    if (parseFloat(cs.opacity) < 0.5) return true;
+    const shape = el.querySelector('path,polygon,use,circle') || el;
+    const scs = getComputedStyle(shape);
+    if (el.tagName.toLowerCase() === 'svg' || shape !== el) {
+      if (scs.fill === 'none' || scs.fill === 'rgba(0, 0, 0, 0)') return true;
+      return isGray(rgb(scs.fill));
+    }
+    return isGray(rgb(cs.backgroundColor)) && isGray(rgb(cs.color));
+  };
+  const centre = e => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; };
+
+  return leaf.map((row, idx) => {
     const L = lines(row.innerText);
     const names = teamNames(L);
-    const stars = [0, 0];
-    let explicit = [null, null], cur = 0;
-    const w = document.createTreeWalker(row, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    // team-name elements
+    const nameEls = [null, null];
+    const w = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
     let n;
     while ((n = w.nextNode())) {
-      if (n.nodeType === 3) {
-        const t = n.textContent.trim();
-        if (!t) continue;
-        if (names[0] && t === names[0]) cur = 0;
-        else if (names[1] && t === names[1]) cur = 1;
-        const f = (t.match(/\u2605|\u2B50/g) || []).length;   // filled star glyphs
-        if (f) stars[cur] += f;
-        continue;
-      }
-      const el = n;
-      if (el.closest('svg') && el.tagName.toLowerCase() !== 'svg') continue;
-      const a = attrs(el);
-      const em = a.match(/(\d)\s*(?:out of\s*\d\s*)?stars?\b/i);
-      if (em && +em[1] >= 1 && +em[1] <= 5) { explicit[cur] = +em[1]; continue; }
-      const tag = el.tagName.toLowerCase();
-      const isIcon = tag === 'svg' || tag === 'img' || tag === 'i' || el.children.length === 0;
-      let hay = a;
-      if (tag === 'svg') hay += ' ' + el.outerHTML.slice(0, 400);
-      if (isIcon && /star/i.test(hay) && !BAD.test(a)) stars[cur] += 1;
+      const t = n.textContent.trim();
+      if (names[0] && t === names[0] && !nameEls[0]) nameEls[0] = n.parentElement;
+      else if (names[1] && t === names[1] && !nameEls[1]) nameEls[1] = n.parentElement;
+    }
+    const nearest = el => {
+      const [x, y] = centre(el);
+      let best = 0, bd = Infinity;
+      nameEls.forEach((ne, i) => {
+        if (!ne) return;
+        const [nx, ny] = centre(ne);
+        const d = Math.hypot(nx - x, (ny - y) * 1.5);
+        if (d < bd) { bd = d; best = i; }
+      });
+      return best;
+    };
+
+    const filled = [0, 0], total = [0, 0], dbg = [];
+    const done = new Set();
+    // (a) rating containers: class/id mentions star|rating, 1-5 icon children, no text
+    for (const c of row.querySelectorAll('[class*=star i],[class*=rating i],[id*=star i],[class*=rate i]')) {
+      if (c.closest('svg') || c.innerText.trim()) continue;
+      const kids = [...c.children];
+      if (kids.length < 1 || kids.length > 5) continue;
+      const team = nearest(c);
+      if (done.has(c) || [...done].some(d => d.contains(c) || c.contains(d))) continue;
+      done.add(c);
+      total[team] += kids.length;
+      kids.forEach(k => { if (!isEmptyIcon(k)) filled[team]++; });
+      dbg.push({via: 'container', team, kids: kids.length, cls: (c.getAttribute('class') || '').slice(0, 60)});
+    }
+    // (b) bare small SVG icons not inside a counted container
+    for (const s of row.querySelectorAll('svg')) {
+      if ([...done].some(d => d.contains(s))) continue;
+      const r = s.getBoundingClientRect();
+      if (r.width < 4 || r.width > 40 || r.height < 4 || r.height > 40) continue;
+      const par = s.parentElement;
+      if (par && ((par.innerText || '').match(ODD) || []).length) continue;
+      const team = nearest(s);
+      total[team]++;
+      if (!isEmptyIcon(s)) filled[team]++;
+      if (dbg.length < 12) dbg.push({via: 'svg', team, w: Math.round(r.width),
+        fill: getComputedStyle(s.querySelector('path,polygon,use') || s).fill,
+        cls: (s.getAttribute('class') || '').slice(0, 40)});
+    }
+
+    let hint = null;
+    for (const h of headers) {
+      if (h.node.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING) hint = h.text;
     }
     return {
-      text: row.innerText,
-      lines: L,
-      names,
-      stars: [explicit[0] !== null ? explicit[0] : stars[0],
-              explicit[1] !== null ? explicit[1] : stars[1]],
+      text: row.innerText, lines: L, names,
+      filled, total, dbg, hint,
+      html: idx < 1 ? row.outerHTML.slice(0, 1800) : null,
     };
   });
 }
@@ -132,23 +194,57 @@ def clean_name(raw):
     return re.sub(r"\s+", " ", s).strip(" -:|()[]")
 
 
-def star_val(n):
-    return n if isinstance(n, int) and 1 <= n <= 5 else None
+def norm_league(raw):
+    for name, pat in LEAGUE_ALIASES:
+        if raw and re.search(pat, raw, re.I):
+            return name
+    return None
 
 
-def make_key(league, round_no, home, away, event_id, day):
-    raw = (f"{league}|{event_id}" if event_id
+def make_key(event_id, league, round_no, home, away, day):
+    raw = (f"id|{event_id}" if event_id
            else f"{league}|{day}|{round_no}|{home}|{away}")
     return hashlib.sha1(raw.encode()).hexdigest()
 
 
+def map_odds(lines):
+    """Sequential odds mapping with Over/Under line detection.
+    Returns (fields dict, ou_line, n_tokens_used)."""
+    toks = [l for l in lines if ODD_TOKEN.match(l)]
+    out, line = {}, None
+    if len(toks) < 3:
+        return out, line, len(toks)
+    f = lambda t: (float(t) if float(t) >= 1.01 else None)
+    out["odds_home"], out["odds_draw"], out["odds_away"] = (f(t) for t in toks[:3])
+    rest = toks[3:]
+    # a one-decimal x.5 token (or an odd-length remainder starting x.50) is the LINE
+    if rest and (re.fullmatch(r"\d\.5", rest[0]) or
+                 (re.fullmatch(r"\d\.50", rest[0]) and len(rest) % 2 == 1)):
+        line = float(rest.pop(0))
+    if len(rest) >= 2:
+        if line is None or line == 2.5:
+            out["odds_over_25"], out["odds_under_25"] = f(rest[0]), f(rest[1])
+        rest = rest[2:]
+    if len(rest) >= 2:
+        out["odds_gg"], out["odds_ng"] = f(rest[0]), f(rest[1])
+    return out, line, len(toks)
+
+
+def star_value(filled, total):
+    """Return 1-5 or None."""
+    if total == 0:
+        return None
+    if filled == 0:
+        return None        # all icons look empty/same colour -> ambiguous
+    return filled if 1 <= filled <= 5 else None
+
+
 async def best_frame(page):
-    """Frame (or main page) with the most decimal odds in its text."""
     best, best_n = page.main_frame, -1
     for fr in page.frames:
         try:
             txt = await fr.evaluate("document.body ? document.body.innerText : ''")
-            n = len(re.findall(ODD_PAT.replace("(?<![\\d.])", "(?<![\\d.])"), txt))
+            n = len(re.findall(ODD_PAT_ANY, txt))
             if n > best_n:
                 best, best_n = fr, n
         except Exception:
@@ -169,64 +265,92 @@ async def click_label(page, pattern):
     return False
 
 
-async def find_rows(frame, mode):
+async def find_rows(frame):
     return await frame.evaluate(FIND_ROWS_JS, {
-        "mode": mode, "oddPat": ODD_PAT, "scorePat": SCORE_PAT, "noise": NOISE.pattern})
+        "oddPat": ODD_PAT_ANY, "noise": NOISE.pattern, "leagueRe": LEAGUE_HEADER_RE})
 
 
-async def page_text(frame):
-    try:
-        return await frame.evaluate("document.body.innerText")
-    except Exception:
-        return ""
-
-
-def detect_league(text, default):
-    for lg in LEAGUES:
-        if re.search(lg, text, re.I):
-            return lg
-    return default
+async def all_text_lines(page):
+    lines = []
+    for fr in page.frames:
+        try:
+            txt = await fr.evaluate("document.body ? document.body.innerText : ''")
+            lines += txt.split("\n")
+        except Exception:
+            continue
+    return lines
 
 
 # ---------- parsing ----------
-def parse_fixture(row, league, round_no, day):
+def parse_fixture(row, tab_league, day):
     home, away = (clean_name(n) for n in (row["names"] + ["", ""])[:2])
     if not home or not away:
         return None
-    odds = [float(o) for o in re.findall(ODD_PAT, row["text"]) if float(o) >= 1.01]
-    rec = {"league": league, "home_team": home, "away_team": away}
+    odds, line, n_odds = map_odds(row["lines"])
     m = ID_RE.search(row["text"])
-    rec["event_id"] = m.group(1) if m else None
+    event_id = m.group(1) if m else None
     rm = ROUND_RE.search(row["text"])
-    rec["round_no"] = int(rm.group(1)) if rm else round_no
-    rec["home_stars"] = star_val(row["stars"][0])
-    rec["away_stars"] = star_val(row["stars"][1])
-    for field, val in zip(ODD_FIELDS, odds):
-        rec[field] = val
-    rec["_n_odds"] = len(odds)
-    rec["fixture_key"] = make_key(league, rec["round_no"], home, away, rec["event_id"], day)
+    round_no = int(rm.group(1)) if rm else None
+    hint = norm_league(row.get("hint"))
+    league = hint or tab_league or "Unknown"
+    rec = {"league": league, "home_team": home, "away_team": away,
+           "event_id": event_id, "round_no": round_no,
+           "home_stars": star_value(row["filled"][0], row["total"][0]),
+           "away_stars": star_value(row["filled"][1], row["total"][1]),
+           "_hint": hint, "_line": line, "_n_odds": n_odds, **odds}
+    rec["fixture_key"] = make_key(event_id, league, round_no, home, away, day)
     return rec
 
 
-def parse_result(row, league, round_no, day):
-    home, away = (clean_name(n) for n in (row["names"] + ["", ""])[:2])
-    sc = next((re.match(SCORE_PAT, l) for l in row["lines"] if re.match(SCORE_PAT, l)), None)
-    if not home or not away or not sc:
-        return None
-    hg, ag = int(sc.group(1)), int(sc.group(2))
-    m = ID_RE.search(row["text"])
-    rm = ROUND_RE.search(row["text"])
-    rn = int(rm.group(1)) if rm else round_no
-    eid = m.group(1) if m else None
-    return {"league": league, "home_team": home, "away_team": away, "event_id": eid,
-            "round_no": rn, "home_score": hg, "away_score": ag,
-            "outcome": "H" if hg > ag else "A" if hg < ag else "D",
-            "fixture_key": make_key(league, rn, home, away, eid, day)}
+def parse_results(lines, known_ids):
+    """Accept only result lines whose ID is a known virtual fixture ID."""
+    out, dropped = {}, 0
+    for l in lines:
+        m = RESULT_LINE.match(l)
+        if not m:
+            continue
+        eid = m.group(1)
+        if eid not in known_ids:
+            dropped += 1
+            continue
+        hg, ag = int(m.group(3)), int(m.group(4))
+        out[eid] = {"event_id": eid, "home_score": hg, "away_score": ag,
+                    "outcome": "H" if hg > ag else "A" if hg < ag else "D"}
+    return list(out.values()), dropped
 
 
-# ---------- scraping ----------
-async def scrape():
-    fixtures, results = {}, {}
+async def scrape_results(page, known_ids):
+    """Try each visible 'Results' control; keep the one that shows our IDs."""
+    for fr in list(page.frames):
+        try:
+            loc = fr.get_by_text(re.compile(r"^\s*results?\s*$", re.I))
+            count = await loc.count()
+        except Exception:
+            continue
+        for i in range(min(count, 4)):
+            try:
+                el = loc.nth(i)
+                if not await el.is_visible():
+                    continue
+                await el.click(timeout=5000)
+                await asyncio.sleep(3)
+            except Exception:
+                continue
+            res, dropped = parse_results(await all_text_lines(page), known_ids)
+            log(f"[diag] results view #{i}: {len(res)} virtual results kept, "
+                f"{dropped} non-virtual dropped; url={page.url}")
+            if res:
+                return res
+            if "vFootball" not in page.url:      # navigated to real-sports results
+                await page.goto(URL, wait_until="domcontentloaded", timeout=60000)
+                await asyncio.sleep(6)
+    log("[warn] no Results view contained our virtual event IDs")
+    return []
+
+
+# ---------- orchestration ----------
+async def scrape(db_known_ids):
+    fixtures = {}
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=HEADLESS)
@@ -237,139 +361,118 @@ async def scrape():
         page = await ctx.new_page()
         try:
             await page.goto(URL, wait_until="domcontentloaded", timeout=60000)
-            frame, n = None, 0
-            for _ in range(15):                      # wait up to ~45s for odds to render
+            n = 0
+            for _ in range(15):
                 await asyncio.sleep(3)
                 frame, n = await best_frame(page)
                 if n >= 3:
                     break
-            log(f"[diag] page title: {await page.title()!r}; url: {page.url}")
-            log(f"[diag] frames: {len(page.frames)}; odds-like numbers in best frame: {n}")
+            log(f"[diag] title={await page.title()!r}; frames={len(page.frames)}; odds-like numbers={n}")
             if n < 3:
-                raise RuntimeError("No decimal odds found on page (blocked / geo-restricted / not loaded?)")
+                raise RuntimeError("No odds found (blocked / geo-restricted / not loaded?)")
 
-            for league in LEAGUES:
-                clicked = await click_label(page, rf"^\s*{league}\b")
-                if not clicked:
-                    log(f"[warn] could not click a '{league}' tab; will detect league from page text")
-                frame, _ = await best_frame(page)
-                txt = await page_text(frame)
-                rm = ROUND_RE.search(txt)
-                round_no = int(rm.group(1)) if rm else None
-                if round_no is None:
-                    log(f"[warn] {league}: no 'Round N' text found on page; round_no left null")
-                lg = league if clicked else detect_league(txt, "Unknown")
-
-                rows = await find_rows(frame, "fixtures")
-                log(f"[diag] {lg}: {len(rows)} fixture rows found")
-                for r in rows[:2]:
-                    log(f"[diag] sample row lines: {r['lines'][:14]} stars={r['stars']}")
-                for r in rows:
-                    rec = parse_fixture(r, lg, round_no, day)
-                    if rec:
-                        fixtures[rec["fixture_key"]] = rec
-
-                if SCRAPE_RESULTS:
-                    if await click_label(page, r"^\s*(results?|history|settled)\s*$"):
-                        frame, _ = await best_frame(page)
-                        rrows = await find_rows(frame, "results")
-                        log(f"[diag] {lg}: {len(rrows)} result rows found")
-                        for r in rrows[:2]:
-                            log(f"[diag] sample result lines: {r['lines'][:10]}")
-                        for r in rrows:
-                            rec = parse_result(r, lg, round_no, day)
-                            if rec:
-                                results[rec["fixture_key"]] = rec
-                        await click_label(page, r"^\s*(fixtures?|upcoming|matches|games|schedule)\s*$")
+            views = [None] + LEAGUES          # current view first, then each league tab
+            for tab in views:
+                tab_league = None
+                if tab:
+                    if await click_label(page, rf"^\s*{tab}\b"):
+                        tab_league = tab
                     else:
-                        log("[warn] no Results/History tab found; skipping results")
+                        log(f"[warn] no clickable '{tab}' tab")
+                        continue
+                frame, _ = await best_frame(page)
+                rows = await find_rows(frame)
+                log(f"[diag] view={tab or 'default'}: {len(rows)} fixture rows")
+                for r in rows:
+                    rec = parse_fixture(r, tab_league, day)
+                    if rec:
+                        fixtures.setdefault(rec["fixture_key"], rec)
+                if rows and tab is None:
+                    first = rows[0]
+                    log(f"[diag] sample row lines: {first['lines']}")
+                    log(f"[diag] sample star debug (filled={first['filled']}, total={first['total']}): {first['dbg']}")
+                    log(f"[diag] sample header hint: {first['hint']!r}")
+                    if first.get("html"):
+                        log(f"[diag] sample row HTML:\n{first['html']}")
+
+            recs = list(fixtures.values())
+            if SCRAPE_RESULTS:
+                known = set(db_known_ids) | {f["event_id"] for f in recs if f["event_id"]}
+                results = await scrape_results(page, known)
+            else:
+                results = []
         except Exception as e:
             log(f"[error] {e}")
             await page.screenshot(path="debug.png", full_page=True)
             with open("debug.html", "w", encoding="utf-8") as fh:
                 fh.write(await page.content())
-            try:
-                fr, _ = await best_frame(page)
-                log("[diag] page text excerpt:\n" + (await page_text(fr))[:1500])
-            except Exception:
-                pass
             raise
         finally:
             await browser.close()
-    return list(fixtures.values()), list(results.values())
-
-
-# ---------- database ----------
-def clean_for_db(rows):
-    out = []
-    for r in rows:
-        r = {k: v for k, v in r.items() if v is not None and not k.startswith("_")}
-        out.append(r)   # None-valued keys dropped so upserts never overwrite with NULL
-    return out
-
-
-def batch_upsert(client, rows, label):
-    groups = {}
-    for r in rows:
-        groups.setdefault(tuple(sorted(r)), []).append(r)
-    for batch in groups.values():
-        for i in range(0, len(batch), 200):
-            client.table(TABLE).upsert(batch[i:i + 200], on_conflict="fixture_key").execute()
-    print(f"Upserted {len(rows)} {label}")
-
-
-def link_results(client, results):
-    """Results without an event ID: attach to the newest un-scored fixture with same teams."""
-    for r in results:
-        if r.get("event_id"):
-            continue
-        try:
-            q = (client.table(TABLE).select("fixture_key")
-                 .eq("home_team", r["home_team"]).eq("away_team", r["away_team"])
-                 .is_("home_score", "null").order("scraped_at", desc=True).limit(1).execute())
-            if q.data:
-                r["fixture_key"] = q.data[0]["fixture_key"]
-            else:
-                log(f"[warn] no matching fixture for result {r['home_team']} v {r['away_team']}; saving standalone")
-        except Exception as e:
-            log(f"[warn] result linking failed: {e}")
+    return recs, results
 
 
 def main():
-    fixtures, results = asyncio.run(scrape())
+    client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+    try:
+        rows = client.table(TABLE).select("event_id").not_.is_("event_id", "null").limit(5000).execute().data
+        db_ids = {r["event_id"] for r in rows}
+    except Exception as e:
+        log(f"[warn] could not load known event IDs: {e}")
+        db_ids = set()
 
-    # ---- diagnostics summary ----
+    fixtures, results = asyncio.run(scrape(db_ids))
+
+    # ---- league scoping for fixtures ----
+    dist = {}
+    for f in fixtures:
+        dist[f["league"]] = dist.get(f["league"], 0) + 1
+    log(f"[diag] league labels found: {dist}")
+    kept = [f for f in fixtures if f["_hint"] is None or f["league"] in LEAGUES]
+    if len(kept) != len(fixtures):
+        log(f"[diag] skipped {len(fixtures) - len(kept)} fixtures from non-target leagues "
+            f"(add them to LEAGUES if you want them)")
+    fixtures = kept
+
     n = len(fixtures)
     if n:
-        log(f"[diag] fixtures: {n}; missing stars: {sum(1 for f in fixtures if f['home_stars'] is None)}; "
-            f"missing round: {sum(1 for f in fixtures if f['round_no'] is None)}; "
-            f"missing event_id: {sum(1 for f in fixtures if not f['event_id'])}")
-        counts = {}
+        log(f"[diag] fixtures={n}; stars missing={sum(1 for f in fixtures if f['home_stars'] is None)}; "
+            f"round missing={sum(1 for f in fixtures if f['round_no'] is None)}; "
+            f"GG/NG missing={sum(1 for f in fixtures if 'odds_gg' not in f)}")
+        counts, lines_seen = {}, {}
         for f in fixtures:
             counts[f["_n_odds"]] = counts.get(f["_n_odds"], 0) + 1
-        log(f"[diag] odds-per-row distribution (expect 7 for full 1X2+OU+GG/NG): {counts}")
-        if any(c in counts for c in (4, 6)) or any(c > 7 for c in counts):
-            log("[warn] unusual odds counts - mapping may be misaligned; check sample rows above")
+            lines_seen[f["_line"]] = lines_seen.get(f["_line"], 0) + 1
+        log(f"[diag] odds tokens per row: {counts}; O/U lines seen: {lines_seen}")
+
     print("=== DIAGNOSTICS ===")
     print("\n".join(DIAG))
     print("===================")
-    print(f"Scraped {n} fixtures, {len(results)} results")
-
+    print(f"Scraped {n} fixtures, {len(results)} virtual results")
     if not fixtures and not results:
         sys.exit("Nothing scraped - read DIAGNOSTICS above")
 
     now = datetime.now(timezone.utc).isoformat()
+    clean = []
     for f in fixtures:
-        f["scraped_at"] = now
-    for r in results:
-        r["result_scraped_at"] = now
+        r = {k: v for k, v in f.items() if v is not None and not k.startswith("_")}
+        r["scraped_at"] = now
+        clean.append(r)
+    groups = {}
+    for r in clean:
+        groups.setdefault(tuple(sorted(r)), []).append(r)
+    for batch in groups.values():
+        for i in range(0, len(batch), 200):
+            client.table(TABLE).upsert(batch[i:i + 200], on_conflict="fixture_key").execute()
+    print(f"Upserted {len(clean)} fixtures")
 
-    client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
-    if fixtures:
-        batch_upsert(client, clean_for_db(fixtures), "fixtures")
-    if results:
-        link_results(client, results)
-        batch_upsert(client, clean_for_db(results), "results")
+    updated = 0
+    for r in results:
+        eid = r.pop("event_id")
+        r["result_scraped_at"] = now
+        res = client.table(TABLE).update(r).eq("event_id", eid).execute()
+        updated += len(res.data or [])
+    print(f"Updated {updated} fixture rows with results")
 
 
 if __name__ == "__main__":
