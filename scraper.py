@@ -1,19 +1,32 @@
 """
-SportyBet virtual football scraper v4 (zero-config, regex + structure).
+SportyBet virtual football scraper v5 - built from the real page DOM.
+
+Real structure (from your log):
+  .match-row
+    .clock-time "10:08"      .game-id "ID: 32654"
+    .home-team / .away-team
+    .m-market[data-op="...event_sr:match:<SRID>_market_1"]    -> 1X2 (3 odds)
+    .m-market[data-op="...<SRID>_market_18"]                  -> Over/Under, line in
+                                                                 .af-select-input (dropdown!)
+    .market-size "+45"       -> opens the full market list
+  League headers look like "England Virtual".
+
+What this version does
+  * Reads rows by those classes (no guessing).
+  * Over/Under: reads the dropdown line; if it is not 2.5 it opens the dropdown
+    and picks 2.5. The line and the displayed odds are always stored too
+    (ou_line, odds_over, odds_under) so a wrong line can never be mislabeled.
+  * GG/NG: opens "+45" per match and reads market 29 (best effort, capped,
+    stops after 3 consecutive failures). The first probe logs what it saw.
+  * Results: opens SportyBet's results page, tries to switch it to Virtual,
+    keeps only lines whose ID is one of OUR stored virtual fixtures, and
+    updates those rows by event_id.
+  * Stars / round: NOT present in the lobby row DOM. They stay null; the
+    "+45" probe logs whether the detail view has anything star-like.
 
 Env (required): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-Env (optional): SPORTYBET_URL, HEADLESS, SCRAPE_RESULTS
-
-Fixes in v4
- 1. Odds: tokens with 1-2 decimals are read in on-screen order. After the
-    three 1X2 odds, a one-decimal token like "2.5" is treated as the
-    Over/Under LINE (skipped, never stored as odds); the next two are
-    Over/Under; the next two (if present) are GG/NG.
- 2. Stars: counts <svg> icons / rating-container children next to each team
-    name (nearest-name assignment, filled vs empty by colour/class).
- 3. Results: only results whose event ID belongs to a virtual fixture we
-    already stored are accepted (real-world sports results are dropped),
-    and they UPDATE the fixture row by event_id - no standalone rows.
+Env (optional): SPORTYBET_URL, HEADLESS, SCRAPE_RESULTS, ENRICH_DETAIL,
+                ENRICH_MAX (45), LEAGUES (comma list; empty = all found)
 """
 import asyncio
 import hashlib
@@ -26,31 +39,18 @@ from playwright.async_api import async_playwright
 from supabase import create_client
 
 URL = os.environ.get("SPORTYBET_URL", "https://www.sportybet.com/ng/sport/vFootball")
+BASE = URL.split("/ng/")[0]
+RESULTS_URL = os.environ.get("RESULTS_URL", BASE + "/ng/liveResult/")
 HEADLESS = os.environ.get("HEADLESS", "true").lower() != "false"
 SCRAPE_RESULTS = os.environ.get("SCRAPE_RESULTS", "true").lower() != "false"
-LEAGUES = ["Germany", "Spain"]          # target virtual leagues
+ENRICH_DETAIL = os.environ.get("ENRICH_DETAIL", "true").lower() != "false"
+ENRICH_MAX = int(os.environ.get("ENRICH_MAX", "45"))
+LEAGUES = [x.strip() for x in os.environ.get("LEAGUES", "").split(",") if x.strip()]
 TABLE = "scraped_fixtures"
 
-LEAGUE_ALIASES = [
-    ("Germany", r"germany|bundesliga"), ("Spain", r"spain|la ?liga"),
-    ("England", r"england|premier"), ("Italy", r"italy|serie ?a"),
-    ("France", r"france|ligue ?1"),
-]
-LEAGUE_HEADER_RE = "|".join(p for _, p in LEAGUE_ALIASES)
-
-ODD_TOKEN = re.compile(r"^\d{1,3}\.\d{1,2}$")            # 1 or 2 decimals
-ODD_PAT_ANY = r"(?<![\d.])\d{1,3}\.\d{1,2}(?![\d.])"
-SCORE_PAT = r"^\s*(\d{1,2})\s*[-\u2013:]\s*(\d{1,2})\s*$"
-ID_RE = re.compile(r"ID\s*[:#]?\s*(\d+)", re.I)
-ROUND_RE = re.compile(r"(?:round|rd\.?|matchday|md)\s*[:#.]?\s*(\d{1,4})", re.I)
-# "ID <tab> Home <tab> 2:1 <tab> Away" as rendered in result tables
 RESULT_LINE = re.compile(
     r"^\s*(\d{4,8})\s*\t+\s*(.+?)\s*\t+\s*(\d{1,2})\s*[:\-\u2013]\s*(\d{1,2})"
     r"\s*(?:\([^)]*\))?\s*\t+\s*(.+?)\s*$")
-NOISE = re.compile(
-    r"^(1|x|2|over|under|gg|ng|home|draw|away|1x2|o/u|btts|vs\.?|v|ft|ht|"
-    r"round.*|rd.*|matchday.*|id.*|[+\-]?\d+(\.\d+)?)$", re.I)
-
 DIAG = []
 
 
@@ -59,251 +59,100 @@ def log(msg):
     DIAG.append(msg)
 
 
-# ---------- in-browser row finder ----------
-FIND_ROWS_JS = r"""
-(args) => {
-  const ODD = new RegExp(args.oddPat, 'g');
-  const NOISE = new RegExp(args.noise, 'i');
-  const HDR = new RegExp(args.leagueRe, 'i');
-  const lines = t => (t || '').split('\n').map(s => s.trim()).filter(Boolean);
-  const nameLines = L => L.filter(l => /[A-Za-z]{2,}/.test(l) && !NOISE.test(l));
-  const teamNames = L => {
-    const n = nameLines(L);
-    if (!n.length) return [];
-    const m = n[0].match(/^(.+?)\s+(?:vs\.?|v)\s+(.+)$/i);
-    return m ? [m[1], m[2]] : n.slice(0, 2);
-  };
-  const ok = el => {
-    const t = el.innerText;
-    if (!t || t.length > 1500) return false;
-    if (teamNames(lines(t)).length < 2) return false;
-    return (t.match(ODD) || []).length >= 3;
-  };
-  const cands = [];
-  for (const el of document.body.querySelectorAll('*')) {
-    if (el.children.length < 2 && el.tagName !== 'LI') continue;
-    if (el.closest('svg')) continue;
-    const r = el.getBoundingClientRect();
-    if (r.width === 0 || r.height === 0) continue;
-    if (ok(el)) cands.push(el);
-  }
-  const leaf = cands.filter(el => !cands.some(o => o !== el && el.contains(o)));
-
-  // non-interactive short headings that look like league names
+# ---------- in-browser extraction (real selectors) ----------
+ROWS_JS = r"""
+() => {
+  const HDR = /^[A-Za-z][A-Za-z .&'-]{1,30}\s+Virtual$/i;
   const headers = [];
   const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   let tn;
   while ((tn = tw.nextNode())) {
     const t = tn.textContent.trim();
-    if (t.length < 3 || t.length > 40 || !HDR.test(t)) continue;
+    if (t.length < 5 || t.length > 40 || !HDR.test(t)) continue;
     const p = tn.parentElement;
     if (!p || p.closest('button,a,[role=tab],[role=button],nav')) continue;
     headers.push({node: tn, text: t});
   }
-
-  const BAD = /empty|inactive|\boff\b|outline|gr[ae]y|disabled|unfilled|blank|unselected/i;
-  const rgb = s => { const m = (s || '').match(/\d+(\.\d+)?/g); return m ? m.slice(0, 3).map(Number) : null; };
-  const isGray = c => !c || (Math.max(...c) - Math.min(...c) < 20);
-  const isEmptyIcon = el => {
-    const cls = (el.getAttribute('class') || '') + ' ' + (el.id || '') + ' ' + (el.getAttribute('aria-label') || '');
-    if (BAD.test(cls)) return true;
-    const cs = getComputedStyle(el);
-    if (parseFloat(cs.opacity) < 0.5) return true;
-    const shape = el.querySelector('path,polygon,use,circle') || el;
-    const scs = getComputedStyle(shape);
-    if (el.tagName.toLowerCase() === 'svg' || shape !== el) {
-      if (scs.fill === 'none' || scs.fill === 'rgba(0, 0, 0, 0)') return true;
-      return isGray(rgb(scs.fill));
-    }
-    return isGray(rgb(cs.backgroundColor)) && isGray(rgb(cs.color));
-  };
-  const centre = e => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; };
-
-  return leaf.map((row, idx) => {
-    const L = lines(row.innerText);
-    const names = teamNames(L);
-    // team-name elements
-    const nameEls = [null, null];
-    const w = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
-    let n;
-    while ((n = w.nextNode())) {
-      const t = n.textContent.trim();
-      if (names[0] && t === names[0] && !nameEls[0]) nameEls[0] = n.parentElement;
-      else if (names[1] && t === names[1] && !nameEls[1]) nameEls[1] = n.parentElement;
-    }
-    const nearest = el => {
-      const [x, y] = centre(el);
-      let best = 0, bd = Infinity;
-      nameEls.forEach((ne, i) => {
-        if (!ne) return;
-        const [nx, ny] = centre(ne);
-        const d = Math.hypot(nx - x, (ny - y) * 1.5);
-        if (d < bd) { bd = d; best = i; }
-      });
-      return best;
-    };
-
-    const filled = [0, 0], total = [0, 0], dbg = [];
-    const done = new Set();
-    // (a) rating containers: class/id mentions star|rating, 1-5 icon children, no text
-    for (const c of row.querySelectorAll('[class*=star i],[class*=rating i],[id*=star i],[class*=rate i]')) {
-      if (c.closest('svg') || c.innerText.trim()) continue;
-      const kids = [...c.children];
-      if (kids.length < 1 || kids.length > 5) continue;
-      const team = nearest(c);
-      if (done.has(c) || [...done].some(d => d.contains(c) || c.contains(d))) continue;
-      done.add(c);
-      total[team] += kids.length;
-      kids.forEach(k => { if (!isEmptyIcon(k)) filled[team]++; });
-      dbg.push({via: 'container', team, kids: kids.length, cls: (c.getAttribute('class') || '').slice(0, 60)});
-    }
-    // (b) bare small SVG icons not inside a counted container
-    for (const s of row.querySelectorAll('svg')) {
-      if ([...done].some(d => d.contains(s))) continue;
-      const r = s.getBoundingClientRect();
-      if (r.width < 4 || r.width > 40 || r.height < 4 || r.height > 40) continue;
-      const par = s.parentElement;
-      if (par && ((par.innerText || '').match(ODD) || []).length) continue;
-      const team = nearest(s);
-      total[team]++;
-      if (!isEmptyIcon(s)) filled[team]++;
-      if (dbg.length < 12) dbg.push({via: 'svg', team, w: Math.round(r.width),
-        fill: getComputedStyle(s.querySelector('path,polygon,use') || s).fill,
-        cls: (s.getAttribute('class') || '').slice(0, 40)});
-    }
-
+  return [...document.querySelectorAll('.match-row')].map(row => {
+    const t = s => { const e = row.querySelector(s); return e ? e.textContent.trim() : null; };
+    const opEl = row.querySelector('[data-op*="event_sr:match:"]');
+    const markets = [...row.querySelectorAll('.m-market')].map(m => {
+      const mid = ((m.getAttribute('data-op') || '').match(/_market_(\d+)/) || [])[1] || null;
+      const sel = m.querySelector('.af-select-input');
+      return {id: mid,
+              line: sel ? sel.textContent.replace('^', '').trim() : null,
+              odds: [...m.querySelectorAll('.m-outcome-odds')].map(e => e.textContent.trim())};
+    });
     let hint = null;
-    for (const h of headers) {
+    for (const h of headers)
       if (h.node.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING) hint = h.text;
-    }
-    return {
-      text: row.innerText, lines: L, names,
-      filled, total, dbg, hint,
-      html: idx < 1 ? row.outerHTML.slice(0, 1800) : null,
-    };
+    return {home: t('.home-team'), away: t('.away-team'), gameId: t('.game-id'),
+            time: t('.clock-time'), op: opEl ? opEl.getAttribute('data-op') : null,
+            hint, markets};
   });
 }
 """
 
 
 # ---------- helpers ----------
+def num(s):
+    m = re.search(r"\d+(?:\.\d+)?", s or "")
+    return float(m.group()) if m else None
+
+
+def odd(s):
+    v = num(s)
+    return v if v is not None and v >= 1.01 else None
+
+
 def clean_name(raw):
-    s = ID_RE.sub("", raw or "")
+    s = re.sub(r"ID\s*[:#]?\s*\d+", "", raw or "", flags=re.I)
     s = re.sub(r"\b\d+(\.\d+)?\b", "", s)
-    s = re.sub(r"[\u2605\u2606\u2B50]", "", s)
     return re.sub(r"\s+", " ", s).strip(" -:|()[]")
 
 
-def norm_league(raw):
-    for name, pat in LEAGUE_ALIASES:
-        if raw and re.search(pat, raw, re.I):
-            return name
-    return None
+def league_name(hint):
+    if not hint:
+        return "Unknown"
+    return re.sub(r"\s*virtual\s*", "", hint, flags=re.I).strip().title() or "Unknown"
 
 
-def make_key(event_id, league, round_no, home, away, day):
-    raw = (f"id|{event_id}" if event_id
-           else f"{league}|{day}|{round_no}|{home}|{away}")
+def make_key(sr_id, event_id, league, home, away, day):
+    raw = (f"sr|{sr_id}" if sr_id else f"id|{event_id}" if event_id
+           else f"{league}|{day}|{home}|{away}")
     return hashlib.sha1(raw.encode()).hexdigest()
 
 
-def map_odds(lines):
-    """Sequential odds mapping with Over/Under line detection.
-    Returns (fields dict, ou_line, n_tokens_used)."""
-    toks = [l for l in lines if ODD_TOKEN.match(l)]
-    out, line = {}, None
-    if len(toks) < 3:
-        return out, line, len(toks)
-    f = lambda t: (float(t) if float(t) >= 1.01 else None)
-    out["odds_home"], out["odds_draw"], out["odds_away"] = (f(t) for t in toks[:3])
-    rest = toks[3:]
-    # a one-decimal x.5 token (or an odd-length remainder starting x.50) is the LINE
-    if rest and (re.fullmatch(r"\d\.5", rest[0]) or
-                 (re.fullmatch(r"\d\.50", rest[0]) and len(rest) % 2 == 1)):
-        line = float(rest.pop(0))
-    if len(rest) >= 2:
-        if line is None or line == 2.5:
-            out["odds_over_25"], out["odds_under_25"] = f(rest[0]), f(rest[1])
-        rest = rest[2:]
-    if len(rest) >= 2:
-        out["odds_gg"], out["odds_ng"] = f(rest[0]), f(rest[1])
-    return out, line, len(toks)
-
-
-def star_value(filled, total):
-    """Return 1-5 or None."""
-    if total == 0:
-        return None
-    if filled == 0:
-        return None        # all icons look empty/same colour -> ambiguous
-    return filled if 1 <= filled <= 5 else None
-
-
-async def best_frame(page):
-    best, best_n = page.main_frame, -1
-    for fr in page.frames:
-        try:
-            txt = await fr.evaluate("document.body ? document.body.innerText : ''")
-            n = len(re.findall(ODD_PAT_ANY, txt))
-            if n > best_n:
-                best, best_n = fr, n
-        except Exception:
-            continue
-    return best, best_n
-
-
-async def click_label(page, pattern):
-    for fr in page.frames:
-        try:
-            loc = fr.get_by_text(re.compile(pattern, re.I)).first
-            if await loc.count() and await loc.is_visible():
-                await loc.click(timeout=5000)
-                await asyncio.sleep(2)
-                return True
-        except Exception:
-            continue
-    return False
-
-
-async def find_rows(frame):
-    return await frame.evaluate(FIND_ROWS_JS, {
-        "oddPat": ODD_PAT_ANY, "noise": NOISE.pattern, "leagueRe": LEAGUE_HEADER_RE})
-
-
-async def all_text_lines(page):
-    lines = []
-    for fr in page.frames:
-        try:
-            txt = await fr.evaluate("document.body ? document.body.innerText : ''")
-            lines += txt.split("\n")
-        except Exception:
-            continue
-    return lines
-
-
-# ---------- parsing ----------
-def parse_fixture(row, tab_league, day):
-    home, away = (clean_name(n) for n in (row["names"] + ["", ""])[:2])
+def parse_row(r, day):
+    home, away = clean_name(r.get("home")), clean_name(r.get("away"))
     if not home or not away:
         return None
-    odds, line, n_odds = map_odds(row["lines"])
-    m = ID_RE.search(row["text"])
-    event_id = m.group(1) if m else None
-    rm = ROUND_RE.search(row["text"])
-    round_no = int(rm.group(1)) if rm else None
-    hint = norm_league(row.get("hint"))
-    league = hint or tab_league or "Unknown"
+    event_id = (re.search(r"\d+", r.get("gameId") or "") or [None])[0]
+    sr_m = re.search(r"sr:match:(\d+)", r.get("op") or "")
+    sr_id = sr_m.group(1) if sr_m else None
+    league = league_name(r.get("hint"))
     rec = {"league": league, "home_team": home, "away_team": away,
-           "event_id": event_id, "round_no": round_no,
-           "home_stars": star_value(row["filled"][0], row["total"][0]),
-           "away_stars": star_value(row["filled"][1], row["total"][1]),
-           "_hint": hint, "_line": line, "_n_odds": n_odds, **odds}
-    rec["fixture_key"] = make_key(event_id, league, round_no, home, away, day)
+           "event_id": event_id, "sr_match_id": sr_id,
+           "kickoff_time": re.sub(r"\s+", " ", (r.get("time") or "").replace("\xa0", " ")).strip() or None}
+    by_id = {m["id"]: m for m in r.get("markets", []) if m.get("id")}
+    m1 = by_id.get("1")
+    if m1 and len(m1["odds"]) >= 3:
+        rec["odds_home"], rec["odds_draw"], rec["odds_away"] = (odd(x) for x in m1["odds"][:3])
+    m18 = by_id.get("18")
+    if m18 and len(m18["odds"]) >= 2:
+        line = num(m18.get("line"))
+        rec["ou_line"] = line
+        rec["odds_over"], rec["odds_under"] = odd(m18["odds"][0]), odd(m18["odds"][1])
+        if line == 2.5:
+            rec["odds_over_25"], rec["odds_under_25"] = rec["odds_over"], rec["odds_under"]
+    m29 = by_id.get("29")
+    if m29 and len(m29["odds"]) >= 2:
+        rec["odds_gg"], rec["odds_ng"] = odd(m29["odds"][0]), odd(m29["odds"][1])
+    rec["fixture_key"] = make_key(sr_id, event_id, league, home, away, day)
     return rec
 
 
 def parse_results(lines, known_ids):
-    """Accept only result lines whose ID is a known virtual fixture ID."""
     out, dropped = {}, 0
     for l in lines:
         m = RESULT_LINE.match(l)
@@ -319,38 +168,150 @@ def parse_results(lines, known_ids):
     return list(out.values()), dropped
 
 
-async def scrape_results(page, known_ids):
-    """Try each visible 'Results' control; keep the one that shows our IDs."""
-    for fr in list(page.frames):
+async def all_text_lines(page):
+    lines = []
+    for fr in page.frames:
         try:
-            loc = fr.get_by_text(re.compile(r"^\s*results?\s*$", re.I))
-            count = await loc.count()
+            lines += (await fr.evaluate("document.body ? document.body.innerText : ''")).split("\n")
         except Exception:
             continue
-        for i in range(min(count, 4)):
+    return lines
+
+
+def row_locator(page, event_id):
+    return page.locator(".match-row", has_text=re.compile(rf"ID:\s*{event_id}\b")).first
+
+
+async def wait_rows(page, timeout=30000):
+    await page.wait_for_selector(".match-row", timeout=timeout)
+    await asyncio.sleep(1)
+
+
+# ---------- Over/Under 2.5 via the line dropdown ----------
+async def pick_line_25(page, rec, probe):
+    row = row_locator(page, rec["event_id"])
+    mk = row.locator("[data-op$='_market_18']").first
+    await mk.locator(".af-select-title").first.click(timeout=4000)
+    await asyncio.sleep(0.5)
+    if probe:
+        log(f"[diag] O/U dropdown HTML after opening:\n{(await mk.inner_html())[:1200]}")
+    opt = None
+    for scope in (mk, page.locator("[class*='af-select']")):
+        cand = scope.get_by_text(re.compile(r"^\s*2\.5\s*$")).first
+        if await cand.count() and await cand.is_visible():
+            opt = cand
+            break
+    if not opt:
+        await page.keyboard.press("Escape")
+        return False
+    await opt.click(timeout=4000)
+    await asyncio.sleep(0.6)
+    texts = await mk.locator(".m-outcome-odds").all_inner_texts()
+    line = num(await mk.locator(".af-select-input").first.inner_text())
+    if line == 2.5 and len(texts) >= 2 and odd(texts[0]) and odd(texts[1]):
+        rec["ou_line"] = 2.5
+        rec["odds_over"] = rec["odds_over_25"] = odd(texts[0])
+        rec["odds_under"] = rec["odds_under_25"] = odd(texts[1])
+        return True
+    return False
+
+
+# ---------- GG/NG (and probe for stars) via "+45" ----------
+async def enrich_detail(page, rec, probe):
+    before = page.url
+    row = row_locator(page, rec["event_id"])
+    await row.locator(".market-size").first.click(timeout=4000)
+    await asyncio.sleep(2.5)
+    sr = rec.get("sr_match_id")
+    ops = await page.eval_on_selector_all(
+        "[data-op*='_market_']", "els => els.map(e => e.getAttribute('data-op'))")
+    mids = sorted({m for o in ops if sr and sr in (o or "") for m in re.findall(r"_market_(\d+)", o)},
+                  key=int)
+    if probe:
+        star_like = await page.evaluate(
+            "() => document.querySelectorAll(\"[class*='star' i],[class*='rating' i]\").length")
+        txt = (await page.evaluate("document.body.innerText"))[:700]
+        log(f"[diag] +45 probe: url_changed={page.url != before}; market ids for this match={mids}; "
+            f"star/rating-like elements on page={star_like}\n[diag] +45 page text start:\n{txt}")
+    ok = False
+    if sr:
+        mk = page.locator(f"[data-op*='{sr}'][data-op$='_market_29']").first
+        if await mk.count():
+            odds = await mk.locator(".m-outcome-odds").all_inner_texts()
+            if len(odds) >= 2 and odd(odds[0]) and odd(odds[1]):
+                rec["odds_gg"], rec["odds_ng"] = odd(odds[0]), odd(odds[1])
+                ok = True
+    # return to the list
+    if page.url != before:
+        await page.go_back()
+        await wait_rows(page)
+    else:
+        await page.keyboard.press("Escape")
+        await asyncio.sleep(0.5)
+    return ok
+
+
+# ---------- results ----------
+async def scrape_results(page, known_ids):
+    await page.goto(RESULTS_URL, wait_until="domcontentloaded", timeout=60000)
+    await asyncio.sleep(6)
+
+    async def attempt(label):
+        lines = await all_text_lines(page)
+        res, dropped = parse_results(lines, known_ids)
+        log(f"[diag] results ({label}): {len(res)} virtual kept, {dropped} non-virtual dropped; url={page.url}")
+        return res, lines
+
+    res, lines = await attempt("initial")
+    if res:
+        return res
+    log("[diag] results page top text:\n" + "\n".join(l.strip() for l in lines if l.strip())[:600])
+    labels = await page.evaluate("""() => [...new Set([...document.querySelectorAll(
+        "li,[role=option],[role=tab],button,[class*=tab],[class*=option],[class*=select]")]
+        .filter(e => e.offsetParent !== null).map(e => e.innerText.trim().split('\\n')[0])
+        .filter(t => t && t.length < 30))].slice(0, 40)""")
+    log(f"[diag] clickable labels on results page: {labels}")
+
+    tried, opened = set(), False
+    for _ in range(5):
+        clicked = False
+        cands = page.get_by_text(re.compile(r"virtual", re.I))
+        for i in range(await cands.count()):
+            el = cands.nth(i)
             try:
-                el = loc.nth(i)
                 if not await el.is_visible():
                     continue
-                await el.click(timeout=5000)
+                label = (await el.inner_text()).strip()[:40]
+                if label in tried:
+                    continue
+                tried.add(label)
+                log(f"[diag] clicking results control {label!r}")
+                await el.click(timeout=4000)
                 await asyncio.sleep(3)
+                clicked = True
+                break
             except Exception:
                 continue
-            res, dropped = parse_results(await all_text_lines(page), known_ids)
-            log(f"[diag] results view #{i}: {len(res)} virtual results kept, "
-                f"{dropped} non-virtual dropped; url={page.url}")
+        if clicked:
+            res, _ = await attempt(f"after clicking {sorted(tried)[-1]!r}")
             if res:
                 return res
-            if "vFootball" not in page.url:      # navigated to real-sports results
-                await page.goto(URL, wait_until="domcontentloaded", timeout=60000)
-                await asyncio.sleep(6)
-    log("[warn] no Results view contained our virtual event IDs")
+        elif not opened:        # open a sport dropdown, then look for "Virtual" again
+            opened = True
+            try:
+                dd = page.get_by_text(re.compile(r"^\s*(football|soccer|all sports?)\s*$", re.I)).first
+                await dd.click(timeout=4000)
+                await asyncio.sleep(1.5)
+            except Exception:
+                break
+        else:
+            break
+    log("[warn] could not reach a virtual results view; see the labels above and tell me which to click")
     return []
 
 
 # ---------- orchestration ----------
 async def scrape(db_known_ids):
-    fixtures = {}
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=HEADLESS)
@@ -359,48 +320,60 @@ async def scrape(db_known_ids):
             user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                         "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"))
         page = await ctx.new_page()
+        recs, results = [], []
         try:
             await page.goto(URL, wait_until="domcontentloaded", timeout=60000)
-            n = 0
-            for _ in range(15):
-                await asyncio.sleep(3)
-                frame, n = await best_frame(page)
-                if n >= 3:
-                    break
-            log(f"[diag] title={await page.title()!r}; frames={len(page.frames)}; odds-like numbers={n}")
-            if n < 3:
-                raise RuntimeError("No odds found (blocked / geo-restricted / not loaded?)")
+            await wait_rows(page, 60000)
+            raw = await page.evaluate(ROWS_JS)
+            log(f"[diag] title={await page.title()!r}; .match-row count={len(raw)}")
+            seen = {}
+            for r in raw:
+                rec = parse_row(r, day)
+                if rec:
+                    seen.setdefault(rec["fixture_key"], rec)
+            recs = list(seen.values())
 
-            views = [None] + LEAGUES          # current view first, then each league tab
-            for tab in views:
-                tab_league = None
-                if tab:
-                    if await click_label(page, rf"^\s*{tab}\b"):
-                        tab_league = tab
+            # --- Over/Under 2.5 ---
+            need = [r for r in recs if r.get("ou_line") is not None and r["ou_line"] != 2.5 and r["event_id"]]
+            good = bad = 0
+            for i, rec in enumerate(need):
+                try:
+                    if await pick_line_25(page, rec, probe=(i == 0)):
+                        good += 1
                     else:
-                        log(f"[warn] no clickable '{tab}' tab")
-                        continue
-                frame, _ = await best_frame(page)
-                rows = await find_rows(frame)
-                log(f"[diag] view={tab or 'default'}: {len(rows)} fixture rows")
-                for r in rows:
-                    rec = parse_fixture(r, tab_league, day)
-                    if rec:
-                        fixtures.setdefault(rec["fixture_key"], rec)
-                if rows and tab is None:
-                    first = rows[0]
-                    log(f"[diag] sample row lines: {first['lines']}")
-                    log(f"[diag] sample star debug (filled={first['filled']}, total={first['total']}): {first['dbg']}")
-                    log(f"[diag] sample header hint: {first['hint']!r}")
-                    if first.get("html"):
-                        log(f"[diag] sample row HTML:\n{first['html']}")
+                        bad += 1
+                except Exception as e:
+                    bad += 1
+                    log(f"[warn] line select failed for {rec['event_id']}: {str(e)[:80]}")
+            log(f"[diag] O/U 2.5 selected for {good}/{len(need)} rows ({bad} failed)")
 
-            recs = list(fixtures.values())
+            # --- GG/NG via +45 ---
+            if ENRICH_DETAIL:
+                fails, done, got = 0, 0, 0
+                for rec in recs[:ENRICH_MAX]:
+                    if not rec["event_id"]:
+                        continue
+                    try:
+                        ok = await enrich_detail(page, rec, probe=(done == 0))
+                        got += ok
+                        fails = 0 if ok else fails + 1
+                    except Exception as e:
+                        fails += 1
+                        log(f"[warn] +45 failed for {rec['event_id']}: {str(e)[:80]}")
+                        try:
+                            await page.goto(URL, wait_until="domcontentloaded", timeout=60000)
+                            await wait_rows(page)
+                        except Exception:
+                            break
+                    done += 1
+                    if fails >= 3:
+                        log("[warn] 3 consecutive GG/NG failures - stopping detail scrape")
+                        break
+                log(f"[diag] GG/NG captured for {got}/{done} matches opened")
+
             if SCRAPE_RESULTS:
-                known = set(db_known_ids) | {f["event_id"] for f in recs if f["event_id"]}
+                known = set(db_known_ids) | {r["event_id"] for r in recs if r["event_id"]}
                 results = await scrape_results(page, known)
-            else:
-                results = []
         except Exception as e:
             log(f"[error] {e}")
             await page.screenshot(path="debug.png", full_page=True)
@@ -423,39 +396,31 @@ def main():
 
     fixtures, results = asyncio.run(scrape(db_ids))
 
-    # ---- league scoping for fixtures ----
     dist = {}
     for f in fixtures:
         dist[f["league"]] = dist.get(f["league"], 0) + 1
-    log(f"[diag] league labels found: {dist}")
-    kept = [f for f in fixtures if f["_hint"] is None or f["league"] in LEAGUES]
-    if len(kept) != len(fixtures):
-        log(f"[diag] skipped {len(fixtures) - len(kept)} fixtures from non-target leagues "
-            f"(add them to LEAGUES if you want them)")
-    fixtures = kept
-
-    n = len(fixtures)
-    if n:
-        log(f"[diag] fixtures={n}; stars missing={sum(1 for f in fixtures if f['home_stars'] is None)}; "
-            f"round missing={sum(1 for f in fixtures if f['round_no'] is None)}; "
-            f"GG/NG missing={sum(1 for f in fixtures if 'odds_gg' not in f)}")
-        counts, lines_seen = {}, {}
-        for f in fixtures:
-            counts[f["_n_odds"]] = counts.get(f["_n_odds"], 0) + 1
-            lines_seen[f["_line"]] = lines_seen.get(f["_line"], 0) + 1
-        log(f"[diag] odds tokens per row: {counts}; O/U lines seen: {lines_seen}")
+    log(f"[diag] leagues found: {dist}")
+    if LEAGUES:
+        want = {x.lower() for x in LEAGUES}
+        kept = [f for f in fixtures if f["league"].lower() in want]
+        log(f"[diag] LEAGUES filter {LEAGUES}: kept {len(kept)} of {len(fixtures)}")
+        fixtures = kept
+    if fixtures:
+        cnt = lambda k: sum(1 for f in fixtures if f.get(k) is not None)
+        log(f"[diag] filled: 1X2={cnt('odds_home')} O/U2.5={cnt('odds_over_25')} "
+            f"GG/NG={cnt('odds_gg')} kickoff={cnt('kickoff_time')} of {len(fixtures)}")
 
     print("=== DIAGNOSTICS ===")
     print("\n".join(DIAG))
     print("===================")
-    print(f"Scraped {n} fixtures, {len(results)} virtual results")
+    print(f"Scraped {len(fixtures)} fixtures, {len(results)} virtual results")
     if not fixtures and not results:
         sys.exit("Nothing scraped - read DIAGNOSTICS above")
 
     now = datetime.now(timezone.utc).isoformat()
     clean = []
     for f in fixtures:
-        r = {k: v for k, v in f.items() if v is not None and not k.startswith("_")}
+        r = {k: v for k, v in f.items() if v is not None}
         r["scraped_at"] = now
         clean.append(r)
     groups = {}
@@ -470,7 +435,8 @@ def main():
     for r in results:
         eid = r.pop("event_id")
         r["result_scraped_at"] = now
-        res = client.table(TABLE).update(r).eq("event_id", eid).execute()
+        res = (client.table(TABLE).update(r).eq("event_id", eid)
+               .is_("home_score", "null").execute())
         updated += len(res.data or [])
     print(f"Updated {updated} fixture rows with results")
 
