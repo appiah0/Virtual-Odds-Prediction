@@ -1,0 +1,33 @@
+name: instant-football-bot
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "1 = scrape and pick only, no bets"
+        default: "1"
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          pip install playwright
+          playwright install --with-deps chromium
+      - name: Run bot
+        env:
+          SPORTYBET_PHONE: ${{ secrets.SPORTYBET_PHONE }}
+          SPORTYBET_PASSWORD: ${{ secrets.SPORTYBET_PASSWORD }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: timeout 340m python instant_football_bot.py || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bot-output
+          path: |
+            instant_football.db
+            bot.log
+            debug/
