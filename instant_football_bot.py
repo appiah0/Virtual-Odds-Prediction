@@ -35,7 +35,7 @@ from playwright.sync_api import Page, sync_playwright, Error as PWError, Timeout
 
 # ----------------------------------------------------------------- CONFIG
 BASE_URL = "https://www.sportybet.com/gh/"
-INSTANT_URL = os.getenv("INSTANT_URL", "https://www.sportybet.com/gh/instant-virtual")
+INSTANT_URL = os.getenv("INSTANT_URL") or "https://www.sportybet.com/gh/instant-virtuals"
 PHONE = os.environ.get("SPORTYBET_PHONE")
 PASSWORD = os.environ.get("SPORTYBET_PASSWORD")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
@@ -45,7 +45,7 @@ HEADLESS = os.getenv("HEADLESS", "1") == "1"
 DRY_RUN = os.getenv("DRY_RUN", "0") == "1"
 LEAGUES = [s.strip() for s in os.getenv("LEAGUES", "Spain,Germany").split(",") if s.strip()]
 FIXTURES_PER_LEAGUE = {"Germany": 9, "Spain": 10}
-KNOWN_LEAGUES = ["England", "Spain", "Germany", "Italy", "Champions", "Europa"]
+KNOWN_LEAGUES = ["England", "Spain", "Germany", "Italy", "Champions", "Euros", "Club World Cup"]
 
 STAKE = 0.10
 STAKE_STR = "0.10"
@@ -432,6 +432,11 @@ def wait_ready(page, timeout_s=60):
             # still on last round's result screen -> move on
             if ctx.get_by_text("Total Won", exact=False).count():
                 ctx.get_by_text("Next Round", exact=False).first.click(timeout=3000)
+        except PWError:
+            pass
+        try:
+            if "40X" in page.locator("body").inner_text(timeout=2000) and "doesn't exist" in page.locator("body").inner_text(timeout=2000):
+                raise RuntimeError(f"404 page at {page.url} - set the INSTANT_URL env var to the real Instant Football address")
         except PWError:
             pass
         page.wait_for_timeout(1500)
