@@ -98,65 +98,94 @@ EXTRACT_JS = r"""
   document.querySelectorAll('[data-bot],[data-bot-dd]').forEach(e => {
     e.removeAttribute('data-bot'); e.removeAttribute('data-bot-dd'); });
   const vis = e => e.getClientRects().length > 0;
-  const txt = e => (e.textContent || '').trim();
-  const cx = e => { const r = e.getBoundingClientRect(); return r.left + r.width / 2; };
-  const cy = e => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; };
-  const all = [...document.body.querySelectorAll('*')];
-  const leaves = all.filter(e => e.children.length === 0 && vis(e));
-  const odds = leaves.filter(e => /^\d{1,3}\.\d{2}$/.test(txt(e)));
-  const codes = leaves.filter(e => /^[A-Z]{3,4}$/.test(txt(e)));
-  let headers = leaves.filter(e => names.includes(txt(e)));
-  // league tab strip = 3+ league names on the same line; real section headers are alone on theirs
-  headers = headers.filter(h => headers.filter(o => Math.abs(cy(o) - cy(h)) < 4).length < 3);
+  const rawTxt = e => ((e.innerText !== undefined ? e.innerText : e.textContent) || '').trim();
+  const all = [...document.body.querySelectorAll('*')].filter(vis);
+  const leaves = all.filter(e => e.children.length === 0);
+  const T = new Map(), P = new Map();
+  for (const e of all) {
+    const r = e.getBoundingClientRect();
+    P.set(e, {x: r.left + r.width / 2, y: r.top + r.height / 2});
+  }
+  for (const e of leaves) T.set(e, rawTxt(e));
 
-  const rows = new Set();
-  for (const o of odds) {
-    let a = o.parentElement;
-    while (a && a !== document.body) {
-      const os = odds.filter(x => a.contains(x));
-      if (os.length > n) break;
-      if (os.length === n && codes.filter(x => a.contains(x)).length >= 2) { rows.add(a); break; }
-      a = a.parentElement;
+  const odds = leaves.filter(e => /^\d{1,3}\.\d{2}$/.test(T.get(e)));
+  const codes = leaves.filter(e => /^[A-Z]{3,4}$/.test(T.get(e)));
+
+  // Layout-independent: a fixture = two team codes on the same line. Everything else
+  // (odds, stars, goal-line dropdown) belongs to the fixture line it sits closest to.
+  const lines = [];
+  for (const c of codes.slice().sort((a, b) => P.get(a).y - P.get(b).y)) {
+    const y = P.get(c).y;
+    const ln = lines.find(l => Math.abs(l.y - y) < 5);
+    if (ln) ln.items.push(c); else lines.push({y, items: [c]});
+  }
+  const pairs = lines.filter(l => l.items.length >= 2).map(l => {
+    const it = l.items.sort((a, b) => P.get(a).x - P.get(b).x);
+    return {y: l.y, home: it[0], away: it[1], mid: (P.get(it[0]).x + P.get(it[1]).x) / 2,
+            odds: [], hs: 0, ast: 0, seen: 0, dd: null};
+  }).sort((a, b) => a.y - b.y);
+  if (!pairs.length) return [];
+
+  const gaps = pairs.slice(1).map((p, i) => p.y - pairs[i].y).filter(g => g > 10).sort((a, b) => a - b);
+  const rowH = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 100;
+  const tol = rowH * 0.6;
+  const nearest = y => {
+    let best = null, bd = 1e9;
+    for (const p of pairs) { const d = Math.abs(p.y - y); if (d < bd) { bd = d; best = p; } }
+    return bd <= tol ? best : null;
+  };
+
+  for (const o of odds) { const p = nearest(P.get(o).y); if (p) p.odds.push(o); }
+  if (ou) {
+    for (const e of leaves.filter(e => /^\d\.5$/.test(T.get(e)))) {
+      const p = nearest(P.get(e).y);
+      if (p && !p.dd) p.dd = e;
     }
   }
 
   const rgb = s => { const m = (s || '').match(/\d+(\.\d+)?/g); return m ? m.slice(0, 3).map(Number) : null; };
+  const gold = v => { const c = rgb(v); return !!c && !(v || '').includes('rgba(0, 0, 0, 0)') && c[0] > 180 && c[1] > 120 && c[2] < 130; };
+  const goldStyle = e => { const cs = getComputedStyle(e); return [cs.fill, cs.color, cs.backgroundColor].some(gold); };
   const isFilled = e => {
-    const cs = getComputedStyle(e);
-    for (const v of [cs.fill, cs.color, cs.backgroundColor]) {
-      const c = rgb(v);
-      if (!c || v.includes('rgba(0, 0, 0, 0)')) continue;
-      if (c[0] > 180 && c[1] > 120 && c[2] < 130) return true;
-      if (Math.abs(c[0] - c[1]) < 22 && Math.abs(c[1] - c[2]) < 22) return false;
+    if (e.tagName === 'IMG') {
+      const src = e.getAttribute('src') || '';
+      if (/(off|empty|gr[ae]y|inactive)/i.test(src)) return false;
+      if (/(on|full|fill|active|gold|yellow)/i.test(src)) return true;
     }
+    if (goldStyle(e) || [...e.querySelectorAll('*')].some(goldStyle)) return true;
     const cls = e.getAttribute('class') || '';
     if (/(empty|inactive|off|grey|gray|disabled)/i.test(cls)) return false;
-    if (/(active|filled|full|gold|yellow|checked|on)(\s|$|-|_)/i.test(cls)) return true;
-    return txt(e) === '\u2605';
+    return /(active|filled|full|gold|yellow|checked|on)(\s|$|-|_)/i.test(cls);
+  };
+  const starEls = all.filter(e =>
+    (/star/i.test(e.getAttribute('class') || '') && !e.querySelector('[class*="star" i]')) ||
+    (e.tagName === 'IMG' && /star/i.test(e.getAttribute('src') || '')) ||
+    (e.children.length === 0 && /^[\u2605\u2606]$/.test(T.get(e) || '')));
+  for (const s of starEls) {
+    const p = nearest(P.get(s).y);
+    if (!p) continue;
+    p.seen++;
+    if (isFilled(s)) { if (P.get(s).x < p.mid) p.hs++; else p.ast++; }
+  }
+
+  let headers = leaves.filter(e => names.includes(T.get(e)));
+  // league tab strip = 3+ league names on one line; real section headers are alone on theirs
+  headers = headers.filter(h => headers.filter(o => Math.abs(P.get(o).y - P.get(h).y) < 4).length < 3);
+  const leagueFor = y => {
+    let lg = active, by = -1e9;
+    for (const h of headers) { const hy = P.get(h).y; if (hy <= y && hy > by) { by = hy; lg = T.get(h); } }
+    return lg;
   };
 
   const out = [];
-  for (const a of rows) {
-    const rc = codes.filter(x => a.contains(x)).sort((p, q) => cx(p) - cx(q));
-    const home = txt(rc[0]), away = txt(rc[1]);
-    const mid = (cx(rc[0]) + cx(rc[1])) / 2;
-    const starEls = [...a.querySelectorAll('*')].filter(e =>
-      (/star/i.test(e.getAttribute('class') || '') && !e.querySelector('[class*="star" i]')) ||
-      (e.children.length === 0 && /^[\u2605\u2606]$/.test(txt(e))));
-    let hs = 0, ast = 0;
-    for (const s of starEls) { if (isFilled(s)) { if (cx(s) < mid) hs++; else ast++; } }
-    let league = active;
-    for (const h of headers) {
-      if (h.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) league = txt(h);
-    }
-    const oc = odds.filter(x => a.contains(x)).sort((p, q) => cx(p) - cx(q));
+  for (const p of pairs) {
+    if (p.odds.length !== n) continue;
+    const home = T.get(p.home), away = T.get(p.away), league = leagueFor(p.y);
+    const oc = p.odds.sort((a, b) => P.get(a).x - P.get(b).x);
     oc.forEach((el, i) => el.setAttribute('data-bot', [league, home, away, i].join('|')));
-    if (ou) {
-      const dd = leaves.find(x => a.contains(x) && /^\d\.5$/.test(txt(x)));
-      if (dd) dd.setAttribute('data-bot-dd', [league, home, away].join('|'));
-    }
-    out.push({league, home, away, hs, ast, stars_seen: starEls.length,
-              odds: oc.map(el => parseFloat(txt(el)))});
+    if (p.dd) p.dd.setAttribute('data-bot-dd', [league, home, away].join('|'));
+    out.push({league, home, away, hs: p.hs, ast: p.ast, stars_seen: p.seen,
+              odds: oc.map(el => parseFloat(T.get(el)))});
   }
   return out;
 }
@@ -209,6 +238,15 @@ SCROLL_JS = r"""
   sc.scrollTop = dy === 'top' ? 0 : before + dy * sc.clientHeight;
   return {moved: sc.scrollTop !== before};
 }
+"""
+
+DIAG_JS = r"""
+() => [...document.body.querySelectorAll('*')]
+  .filter(e => e.children.length === 0 && e.getClientRects().length)
+  .slice(0, 400).map(e => { const r = e.getBoundingClientRect();
+    return e.tagName + '.' + (e.getAttribute('class') || '').slice(0, 40) + ' | ' +
+      ((e.innerText !== undefined ? e.innerText : e.textContent) || '').trim().slice(0, 30) +
+      ' | x' + Math.round(r.left) + ' y' + Math.round(r.top); })
 """
 
 SCORE_RE = re.compile(r"\b([A-Z]{3,4}) (\d+)\s?-\s?(\d+) ([A-Z]{3,4})\b")
@@ -339,6 +377,11 @@ def debug_dump(page, tag):
             except Exception:
                 body = "<unreadable>"
             lines.append(f"\n--- FRAME {fr.url}\n{body}")
+        try:
+            diag = page.evaluate(DIAG_JS)
+            lines.append("\n--- VISIBLE LEAF ELEMENTS (tag.class | text | x y)\n" + "\n".join(diag))
+        except Exception as e:
+            lines.append(f"\n(diag failed: {e})")
         (DEBUG_DIR / f"{stamp}_{tag}.txt").write_text("\n".join(lines), encoding="utf-8")
         log.info("debug saved: debug/%s_%s.(png|html|txt)", stamp, tag)
     except Exception as e:
@@ -539,7 +582,10 @@ def scrape_league(ctx, league, round_no):
     open_league(ctx, league)
     for market, n, cols in MARKETS:
         select_market(ctx, market)
-        for m in collect(ctx, league, n).values():
+        got = collect(ctx, league, n)
+        if market == "1X2" and not got:
+            raise RuntimeError(f"{league}: no fixtures found on the 1X2 tab (see debug/ files)")
+        for m in got.values():
             r = row_for(m)
             if len(m["odds"]) == n:
                 r.update(zip(cols, m["odds"]))
@@ -720,6 +766,8 @@ def run_cycle(page, round_no):
             if rows:
                 by_league[league] = rows
 
+        if not by_league:
+            raise RuntimeError("no league returned any fixtures")
         sel = choose_selection(by_league)
         if not sel:
             log.warning("No qualifying selection this round.")
