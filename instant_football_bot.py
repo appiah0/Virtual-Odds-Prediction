@@ -35,7 +35,9 @@ from playwright.sync_api import Page, sync_playwright, Error as PWError, Timeout
 
 # ----------------------------------------------------------------- CONFIG
 BASE_URL = "https://www.sportybet.com/gh/"
-INSTANT_URL = os.getenv("INSTANT_URL") or "https://www.sportybet.com/gh/instant-virtuals"
+INSTANT_URL = os.getenv("INSTANT_URL") or (
+    "https://www.sportybet.com/gh/m/instant-virtuals/quickgame"
+    "?sportId=sr:sport:1&leagueId=201127111256lea000000001")
 PHONE = os.environ.get("SPORTYBET_PHONE")
 PASSWORD = os.environ.get("SPORTYBET_PASSWORD")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
@@ -358,11 +360,19 @@ def find_ctx(page, wait_s=3):
         page.wait_for_timeout(500)
 
 
+def safe_click(loc, timeout=6000):
+    """Normal click; if another element (banner, fixed header) intercepts it, fire the click event directly."""
+    try:
+        loc.click(timeout=timeout)
+    except PWTimeout:
+        loc.dispatch_event("click")
+
+
 def click_text(ctx, text, exact=True, timeout=DEFAULT_TIMEOUT_MS, last=False):
     loc = ctx.get_by_text(text, exact=exact)
     loc = loc.last if last else loc.first
     loc.wait_for(state="visible", timeout=timeout)
-    loc.click(timeout=timeout)
+    safe_click(loc, min(timeout, 6000))
 
 
 def read_balance(page):
@@ -383,6 +393,7 @@ def logged_in(page):
 
 @retry(times=2, delay=5)
 def ensure_login(page):
+    page.set_viewport_size({"width": 1100, "height": 900})
     page.goto(BASE_URL, wait_until="domcontentloaded")
     page.wait_for_timeout(2500)
     if logged_in(page):
@@ -485,7 +496,7 @@ def read_ou_lines(ctx, m):
     data = None
     try:
         dd.scroll_into_view_if_needed(timeout=5000)
-        dd.click(timeout=5000)
+        safe_click(dd, 4000)
         for _ in range(3):
             ctx.wait_for_timeout(350)
             data = ctx.evaluate(POPUP_JS)
@@ -495,7 +506,7 @@ def read_ou_lines(ctx, m):
         log.warning("O/U dropdown failed for %s: %s", tag, str(e).splitlines()[0])
     finally:
         try:
-            dd.click(timeout=3000)  # toggle closed
+            safe_click(dd, 3000)  # toggle closed
             ctx.wait_for_timeout(250)
             if ctx.evaluate(POPUP_JS):
                 page_of(ctx).keyboard.press("Escape")
@@ -615,7 +626,7 @@ def select_odds(ctx, sel):
         loc = ctx.locator(css)
         if loc.count():
             loc.first.scroll_into_view_if_needed()
-            loc.first.click()
+            safe_click(loc.first)
             return
         if not scroll(ctx, SCROLL_FRACTION):
             break
@@ -694,6 +705,7 @@ def run_cycle(page, round_no):
 
     ctx = page
     try:
+        page.set_viewport_size({"width": 430, "height": 932})
         page.goto(INSTANT_URL, wait_until="domcontentloaded")
         ctx = wait_ready(page)
         bal = read_balance(page)
