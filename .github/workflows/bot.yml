@@ -3,8 +3,11 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "1 = scrape and pick only, no bets"
-        default: "1"
+        description: "1 = scrape and pick only, no bets. 0 = place real bets"
+        default: "0"
+concurrency:
+  group: instant-football-bot
+  cancel-in-progress: false
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -21,8 +24,12 @@ jobs:
         env:
           SPORTYBET_PHONE: ${{ secrets.SPORTYBET_PHONE }}
           SPORTYBET_PASSWORD: ${{ secrets.SPORTYBET_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           DRY_RUN: ${{ inputs.dry_run }}
-        run: timeout 340m python instant_football_bot.py || true
+          DAILY_LOSS_LIMIT: "5.00"
+          MAX_CONSEC_FAILS: "3"
+        run: timeout 340m python instant_football_bot.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
