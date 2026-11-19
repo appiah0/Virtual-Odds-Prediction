@@ -140,7 +140,9 @@ EXTRACT_JS = r"""
 
   for (const o of odds) { const p = nearest(P.get(o).y); if (p) p.odds.push(o); }
   if (ou) {
-    for (const e of leaves.filter(e => /^\d\.5$/.test(T.get(e)))) {
+    const re = /^\d\.5$/, tc = e => (e.textContent || '').trim();
+    const cand = all.filter(e => re.test(tc(e)));
+    for (const e of cand.filter(e => ![...e.children].some(c => re.test(tc(c))))) {
       const p = nearest(P.get(e).y);
       if (p && !p.dd) p.dd = e;
     }
@@ -182,27 +184,28 @@ EXTRACT_JS = r"""
 POPUP_JS = r"""
 () => {
   const vis = e => e.getClientRects().length > 0;
-  const txt = e => ((e.innerText !== undefined ? e.innerText : e.textContent) || '').trim();
+  const tc = e => (e.textContent || '').trim();
+  const all = [...document.body.querySelectorAll('*')].filter(vis);
+  const deepest = re => all.filter(e => re.test(tc(e))).filter(e => ![...e.children].some(c => re.test(tc(c))));
   const cx = e => { const r = e.getBoundingClientRect(); return r.left + r.width / 2; };
   const cy = e => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; };
-  const leaves = [...document.body.querySelectorAll('*')].filter(e => e.children.length === 0 && vis(e));
-  const isOdd = e => /^\d{1,3}\.\d{2}$/.test(txt(e));
   const want = ['0.5', '1.5', '2.5', '3.5', '4.5', '5.5'];
-  const start = leaves.find(e => txt(e) === '0.5');
+  const labels = deepest(/^[0-5]\.5$/);
+  const oddsEls = deepest(/^\d{1,3}\.\d{2}$/);
+  const start = labels.find(e => tc(e) === '0.5');
   if (!start) return null;
   let a = start.parentElement;
   while (a && a !== document.body) {
-    const inside = leaves.filter(x => a.contains(x));
-    const have = new Set(inside.map(txt));
-    if (want.every(w => have.has(w)) && inside.filter(isOdd).length >= 10) {
+    const labs = labels.filter(x => a.contains(x));
+    const ods = oddsEls.filter(x => a.contains(x));
+    if (want.every(w => labs.some(l => tc(l) === w)) && ods.length >= 10) {
       const rows = {};
       for (const w of want) {
-        for (const lab of inside.filter(x => txt(x) === w)) {
-          const r = inside.filter(x => isOdd(x) && Math.abs(cy(x) - cy(lab)) < 12).sort((p, q) => cx(p) - cx(q));
+        for (const lab of labs.filter(x => tc(x) === w)) {
+          const r = ods.filter(x => Math.abs(cy(x) - cy(lab)) < 12).sort((p, q) => cx(p) - cx(q));
           if (r.length >= 1 && r.length <= 2) { rows[w] = r; break; }
         }
       }
-      // a locked cell shows a padlock instead of odds: decide over/under by column position
       const twos = Object.values(rows).filter(r => r.length === 2);
       const overX = twos.length ? twos.reduce((s, r) => s + cx(r[0]), 0) / twos.length : null;
       const underX = twos.length ? twos.reduce((s, r) => s + cx(r[1]), 0) / twos.length : null;
@@ -210,10 +213,10 @@ POPUP_JS = r"""
       for (const w of want) {
         const r = rows[w];
         if (!r) continue;
-        if (r.length === 2) out[w] = [parseFloat(txt(r[0])), parseFloat(txt(r[1]))];
+        if (r.length === 2) out[w] = [parseFloat(tc(r[0])), parseFloat(tc(r[1]))];
         else if (overX === null) continue;
         else {
-          const v = parseFloat(txt(r[0]));
+          const v = parseFloat(tc(r[0]));
           out[w] = Math.abs(cx(r[0]) - overX) <= Math.abs(cx(r[0]) - underX) ? [v, null] : [null, v];
         }
       }
@@ -539,6 +542,10 @@ def read_ou_lines(ctx, m):
     tag = "|".join([m["league"], m["home"], m["away"]])
     loc = ctx.locator(f'[data-bot-dd="{tag}"]')
     if not loc.count():
+        if "nodd" not in _OU_DUMPED:
+            _OU_DUMPED.append("nodd")
+            log.warning("O/U: no goal-line dropdown found for %s (saving debug snapshot)", tag)
+            debug_dump(page_of(ctx), "ou_tab_no_dropdown")
         return None
     dd = loc.first
     data = None
@@ -550,8 +557,9 @@ def read_ou_lines(ctx, m):
             data = ctx.evaluate(POPUP_JS)
             if data and len(data) == 6:
                 break
-        if not data and not _OU_DUMPED:
-            _OU_DUMPED.append(1)
+        if not data and "popup" not in _OU_DUMPED:
+            _OU_DUMPED.append("popup")
+            log.warning("O/U: dropdown opened but lines not readable for %s (saving debug snapshot)", tag)
             debug_dump(page_of(ctx), "ou_popup_not_read")
     except (PWError, PWTimeout) as e:
         log.warning("O/U dropdown failed for %s: %s", tag, str(e).splitlines()[0])
@@ -687,6 +695,25 @@ def select_odds(ctx, sel):
     raise RuntimeError(f"odds cell not found: {css}")
 
 
+def ensure_slip(ctx, sel):
+    """Click the odds and confirm the slip shows the stake box; re-click if the tap was missed."""
+    stake = ctx.locator(STAKE_SPAN).first
+    for attempt in range(1, 4):
+        select_odds(ctx, sel)
+        try:
+            stake.wait_for(state="visible", timeout=5000)
+            return
+        except PWTimeout:
+            pass
+        try:  # maybe it registered but the slip is collapsed
+            safe_click(ctx.locator('[data-op="iv-betslip-button"]').first, 3000)
+            stake.wait_for(state="visible", timeout=3000)
+            return
+        except (PWError, PWTimeout):
+            log.warning("selection did not reach the slip (attempt %d/3), retrying", attempt)
+    raise RuntimeError("selection never appeared in the bet slip")
+
+
 def read_stake(ctx):
     try:
         return float(ctx.locator(STAKE_SPAN).first.inner_text().strip())
@@ -801,7 +828,7 @@ def run_cycle(page, round_no):
         log.info("PICK %s: %s (%s vs %s) stars=%d odds=%.2f", sel["league"], sel["team"],
                  sel["home"], sel["away"], sel["stars"], sel["odds"])
 
-        select_odds(ctx, sel)
+        ensure_slip(ctx, sel)
         ticket = place_bet(ctx)
         if DRY_RUN:
             return "ok"
