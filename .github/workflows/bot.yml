@@ -27,6 +27,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           DRY_RUN: ${{ inputs.dry_run }}
+          INSTANT_URL: ${{ vars.INSTANT_URL }}
           DAILY_LOSS_LIMIT: "5.00"
           MAX_CONSEC_FAILS: "3"
         run: timeout 340m python instant_football_bot.py
