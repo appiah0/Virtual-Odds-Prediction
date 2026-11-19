@@ -99,7 +99,8 @@ EXTRACT_JS = r"""
     e.removeAttribute('data-bot'); e.removeAttribute('data-bot-dd'); });
   const vis = e => e.getClientRects().length > 0;
   const rawTxt = e => ((e.innerText !== undefined ? e.innerText : e.textContent) || '').trim();
-  const all = [...document.body.querySelectorAll('*')].filter(vis);
+  const SKIP = '.recommended-selections, .betslip-option, .beetslip-content, [data-op="iv-betslip-selection"]';
+  const all = [...document.body.querySelectorAll('*')].filter(e => vis(e) && !e.closest(SKIP));
   const leaves = all.filter(e => e.children.length === 0);
   const T = new Map(), P = new Map();
   for (const e of all) {
@@ -108,7 +109,9 @@ EXTRACT_JS = r"""
   }
   for (const e of leaves) T.set(e, rawTxt(e));
 
-  const odds = leaves.filter(e => /^\d{1,3}\.\d{2}$/.test(T.get(e)));
+  // prefer SportyBet's own outcome cells (ignores slip totals like 0.10); generic fallback otherwise
+  const outs = leaves.filter(e => e.closest('[data-op="iv-outcome"]'));
+  const odds = (outs.length ? outs : leaves).filter(e => /^\d{1,3}\.\d{2}$/.test(T.get(e)));
   const codes = leaves.filter(e => /^[A-Z]{3,4}$/.test(T.get(e)));
 
   // Layout-independent: a fixture = two team codes on the same line. Everything else
@@ -143,29 +146,13 @@ EXTRACT_JS = r"""
     }
   }
 
-  const rgb = s => { const m = (s || '').match(/\d+(\.\d+)?/g); return m ? m.slice(0, 3).map(Number) : null; };
-  const gold = v => { const c = rgb(v); return !!c && !(v || '').includes('rgba(0, 0, 0, 0)') && c[0] > 180 && c[1] > 120 && c[2] < 130; };
-  const goldStyle = e => { const cs = getComputedStyle(e); return [cs.fill, cs.color, cs.backgroundColor].some(gold); };
-  const isFilled = e => {
-    if (e.tagName === 'IMG') {
-      const src = e.getAttribute('src') || '';
-      if (/(off|empty|gr[ae]y|inactive)/i.test(src)) return false;
-      if (/(on|full|fill|active|gold|yellow)/i.test(src)) return true;
-    }
-    if (goldStyle(e) || [...e.querySelectorAll('*')].some(goldStyle)) return true;
-    const cls = e.getAttribute('class') || '';
-    if (/(empty|inactive|off|grey|gray|disabled)/i.test(cls)) return false;
-    return /(active|filled|full|gold|yellow|checked|on)(\s|$|-|_)/i.test(cls);
-  };
-  const starEls = all.filter(e =>
-    (/star/i.test(e.getAttribute('class') || '') && !e.querySelector('[class*="star" i]')) ||
-    (e.tagName === 'IMG' && /star/i.test(e.getAttribute('src') || '')) ||
-    (e.children.length === 0 && /^[\u2605\u2606]$/.test(T.get(e) || '')));
+  // SportyBet draws 5 <svg class="star-rating"> per team; lit ones also have "star-rating-lightened"
+  const starEls = all.filter(e => e.classList && e.classList.contains('star-rating'));
   for (const s of starEls) {
     const p = nearest(P.get(s).y);
     if (!p) continue;
     p.seen++;
-    if (isFilled(s)) { if (P.get(s).x < p.mid) p.hs++; else p.ast++; }
+    if (s.classList.contains('star-rating-lightened')) { if (P.get(s).x < p.mid) p.hs++; else p.ast++; }
   }
 
   let headers = leaves.filter(e => names.includes(T.get(e)));
@@ -195,7 +182,7 @@ EXTRACT_JS = r"""
 POPUP_JS = r"""
 () => {
   const vis = e => e.getClientRects().length > 0;
-  const txt = e => (e.textContent || '').trim();
+  const txt = e => ((e.innerText !== undefined ? e.innerText : e.textContent) || '').trim();
   const cx = e => { const r = e.getBoundingClientRect(); return r.left + r.width / 2; };
   const cy = e => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; };
   const leaves = [...document.body.querySelectorAll('*')].filter(e => e.children.length === 0 && vis(e));
@@ -207,12 +194,27 @@ POPUP_JS = r"""
   while (a && a !== document.body) {
     const inside = leaves.filter(x => a.contains(x));
     const have = new Set(inside.map(txt));
-    if (want.every(w => have.has(w)) && inside.filter(isOdd).length >= 12) {
-      const out = {};
+    if (want.every(w => have.has(w)) && inside.filter(isOdd).length >= 10) {
+      const rows = {};
       for (const w of want) {
         for (const lab of inside.filter(x => txt(x) === w)) {
-          const row = inside.filter(x => isOdd(x) && Math.abs(cy(x) - cy(lab)) < 8).sort((p, q) => cx(p) - cx(q));
-          if (row.length === 2) { out[w] = row.map(x => parseFloat(txt(x))); break; }
+          const r = inside.filter(x => isOdd(x) && Math.abs(cy(x) - cy(lab)) < 12).sort((p, q) => cx(p) - cx(q));
+          if (r.length >= 1 && r.length <= 2) { rows[w] = r; break; }
+        }
+      }
+      // a locked cell shows a padlock instead of odds: decide over/under by column position
+      const twos = Object.values(rows).filter(r => r.length === 2);
+      const overX = twos.length ? twos.reduce((s, r) => s + cx(r[0]), 0) / twos.length : null;
+      const underX = twos.length ? twos.reduce((s, r) => s + cx(r[1]), 0) / twos.length : null;
+      const out = {};
+      for (const w of want) {
+        const r = rows[w];
+        if (!r) continue;
+        if (r.length === 2) out[w] = [parseFloat(txt(r[0])), parseFloat(txt(r[1]))];
+        else if (overX === null) continue;
+        else {
+          const v = parseFloat(txt(r[0]));
+          out[w] = Math.abs(cx(r[0]) - overX) <= Math.abs(cx(r[0]) - underX) ? [v, null] : [null, v];
         }
       }
       return out;
@@ -529,6 +531,9 @@ def collect(ctx, league, n, ou=False, on_row=None):
     return seen
 
 
+_OU_DUMPED = []
+
+
 def read_ou_lines(ctx, m):
     """Open the 'Near' goal-line dropdown of one row, read all six lines, close it again."""
     tag = "|".join([m["league"], m["home"], m["away"]])
@@ -545,6 +550,9 @@ def read_ou_lines(ctx, m):
             data = ctx.evaluate(POPUP_JS)
             if data and len(data) == 6:
                 break
+        if not data and not _OU_DUMPED:
+            _OU_DUMPED.append(1)
+            debug_dump(page_of(ctx), "ou_popup_not_read")
     except (PWError, PWTimeout) as e:
         log.warning("O/U dropdown failed for %s: %s", tag, str(e).splitlines()[0])
     finally:
@@ -561,7 +569,7 @@ def read_ou_lines(ctx, m):
     cols = {}
     for line, (over, under) in data.items():
         k = line.replace(".", "")
-        cols[f"odds_over_{k}"], cols[f"odds_under_{k}"] = over, under
+        cols[f"odds_over_{k}"], cols[f"odds_under_{k}"] = over, under  # None = locked
     if len(data) != 6:
         log.warning("%s: only %d/6 O/U lines read", tag, len(data))
     return cols
@@ -656,8 +664,8 @@ def choose_selection(by_league):
 
 
 # ----------------------------------------------------------------- BETTING
-STAKE_INPUT = ("input[type='text']:visible, input[type='tel']:visible, "
-               "input[type='number']:visible, input:not([type]):visible")
+STAKE_SPAN = 'span[data-op="IV_stake_input"]:not(.m-input--quick-bet)'
+PLACE_BET_BTN = '[data-op="IV_betslip_placeBet_cta"]:visible'
 
 
 @retry(times=3, delay=2)
@@ -679,24 +687,42 @@ def select_odds(ctx, sel):
     raise RuntimeError(f"odds cell not found: {css}")
 
 
-def place_bet(ctx):
-    """NOT retried: once Confirm is clicked we must never double-place."""
-    stake_in = ctx.locator(STAKE_INPUT).last
+def read_stake(ctx):
     try:
-        stake_in.wait_for(state="visible", timeout=4000)
-    except PWTimeout:
-        click_text(ctx, "Betslip", exact=True, timeout=5000)  # mobile layout: open the slip first
-        stake_in.wait_for(state="visible", timeout=DEFAULT_TIMEOUT_MS)
-    stake_in.click()
-    stake_in.fill(STAKE_STR)
-    if abs(float(stake_in.input_value() or 0) - STAKE) > 1e-9:
-        raise RuntimeError(f"stake field shows {stake_in.input_value()!r}, expected {STAKE_STR}")
-
-    if DRY_RUN:
-        log.info("DRY_RUN: would place the bet now")
+        return float(ctx.locator(STAKE_SPAN).first.inner_text().strip())
+    except (PWError, PWTimeout, ValueError):
         return None
 
-    click_text(ctx, "Place Bet", exact=False)
+
+def set_stake_with_keypad(ctx):
+    """Only used if the saved default stake is not 0.10: tap the stake, clear it, type 0.10."""
+    safe_click(ctx.locator(STAKE_SPAN).first)
+    ctx.locator(".m-keyboard").first.wait_for(state="visible", timeout=5000)
+    for _ in range(10):
+        safe_click(ctx.locator('.m-keyboard [data-key="delete"]').first, 2000)
+    for ch in STAKE_STR:
+        safe_click(ctx.locator(f'.m-keyboard [data-key="{ch}"]').first, 2000)
+    ctx.wait_for_timeout(300)
+
+
+def place_bet(ctx):
+    """NOT retried: once Confirm is clicked we must never double-place."""
+    stake = ctx.locator(STAKE_SPAN).first
+    try:
+        stake.wait_for(state="visible", timeout=6000)
+    except PWTimeout:
+        safe_click(ctx.locator('[data-op="iv-betslip-button"]').first, 5000)  # open the slip
+        stake.wait_for(state="visible", timeout=DEFAULT_TIMEOUT_MS)
+    if read_stake(ctx) != STAKE:
+        set_stake_with_keypad(ctx)
+        if read_stake(ctx) != STAKE:
+            raise RuntimeError(f"stake shows {read_stake(ctx)!r}, expected {STAKE_STR}")
+
+    if DRY_RUN:
+        log.info("DRY_RUN: slip ready (stake %.2f), not placing the bet", STAKE)
+        return None
+
+    safe_click(ctx.locator(PLACE_BET_BTN).first)
     click_text(ctx, "Confirm", exact=True)
     ticket = None
     try:
