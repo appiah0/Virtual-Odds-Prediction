@@ -55,6 +55,10 @@ MIN_STARS = int(os.getenv("MIN_STARS", "0"))
 DAILY_LOSS_LIMIT = float(os.getenv("DAILY_LOSS_LIMIT", "5.00"))
 MAX_BETS_PER_DAY = int(os.getenv("MAX_BETS_PER_DAY", "100"))
 MAX_CONSEC_FAILS = int(os.getenv("MAX_CONSEC_FAILS", "3"))
+# SportyBet rejects a GHS 0.10 bet with "Potential payout too low" below some odds (seen: 1.35
+# rejected, 1.42 accepted). Start with no floor; learn it from the first rejection of the run.
+MIN_ODDS = float(os.getenv("MIN_ODDS") or 0)
+PAYOUT_FLOOR = 1.40
 CYCLE_MIN_SEC, CYCLE_MAX_SEC = 180, 300  # 3-5 minutes between rounds
 
 MAX_SCROLL_STEPS = 12
@@ -348,6 +352,10 @@ def today_stats():
             "FROM bets WHERE date(ts)=date('now','localtime')"
         ).fetchone()
     return r["n"], r["s"] - r["p"]  # bets today, net loss today (this run's database)
+
+
+class BetRejected(RuntimeError):
+    """SportyBet showed an error dialog instead of accepting the bet (nothing was placed)."""
 
 
 # ----------------------------------------------------------------- UTILITIES
@@ -697,7 +705,7 @@ def scrape_results(ctx, leagues):
 
 
 # ----------------------------------------------------------------- STRATEGY
-def choose_selection(by_league):
+def choose_selection(by_league, min_odds=0.0):
     """ONE match, ONE league. Highest star rating first, lowest 1X2 odds as tie-break."""
     cands = []
     for league, rows in by_league.items():
@@ -706,7 +714,7 @@ def choose_selection(by_league):
                 ("Home", r["home_team"], r.get("home_stars"), r.get("odds_home"), 0),
                 ("Away", r["away_team"], r.get("away_stars"), r.get("odds_away"), 2),
             ):
-                if stars is not None and odds and odds > 1.0 and stars >= MIN_STARS:
+                if stars is not None and odds and odds > 1.0 and odds >= min_odds and stars >= MIN_STARS:
                     cands.append(dict(league=league, home=r["home_team"], away=r["away_team"],
                                       pick=pick, team=team, stars=stars, odds=odds, idx=idx,
                                       fixture_key=r["fixture_key"]))
@@ -749,6 +757,35 @@ def clear_slip(ctx):
             return
         safe_click(crosses.first, 3000)
         ctx.wait_for_timeout(400)
+
+
+def dismiss_dialog(ctx):
+    """Close an error dialog (e.g. 'Potential payout too low') and return its text, else None.
+    The 'Confirm to Pay' sheet is left alone."""
+    d = ctx.locator(".iv-dialog-content:visible")
+    try:
+        if not d.count():
+            return None
+        text = " ".join(d.first.inner_text().split())
+        if "Confirm" in text and "Cancel" in text:
+            return None
+        safe_click(d.first.locator("button.btn").first, 2000)
+        ctx.wait_for_timeout(300)
+        return text
+    except (PWError, PWTimeout):
+        return None
+
+
+def dismiss_promo(ctx):
+    """Best effort: close the 'Scheduled Football' promo popup if it covers the page."""
+    try:
+        promo = ctx.get_by_text("Make every bet more exciting", exact=False)
+        if promo.count() and promo.first.is_visible():
+            box = promo.first.locator("xpath=ancestor::*[.//*[contains(@class,'close')]][1]")
+            safe_click(box.locator("[class*='close' i]").first, 2000)
+            ctx.wait_for_timeout(300)
+    except (PWError, PWTimeout):
+        pass
 
 
 def ensure_slip(ctx, sel):
@@ -806,19 +843,29 @@ def place_bet(ctx):
         return None
 
     safe_click(ctx.locator(PLACE_BET_BTN).first)
-    click_text(ctx, "Confirm", exact=True)
-    ticket = None
+    confirmed = False
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        msg = dismiss_dialog(ctx)
+        if msg:
+            raise BetRejected(msg)
+        if ctx.get_by_text("Kick Off", exact=True).first.is_visible():
+            break
+        if not confirmed:
+            confirm = ctx.get_by_text("Confirm", exact=True).first
+            if confirm.is_visible():
+                safe_click(confirm, 4000)
+                confirmed = True
+        ctx.wait_for_timeout(400)
+    else:
+        raise RuntimeError("bet was not accepted: no Kick Off screen and no error dialog")
+    m = re.search(r"Ticket ID:\s*(\d+)", ctx.locator("body").inner_text())
+    ticket = m.group(1) if m else "unknown"
     try:
-        ctx.get_by_text("Kick Off", exact=True).wait_for(state="visible", timeout=DEFAULT_TIMEOUT_MS)
-        m = re.search(r"Ticket ID:\s*(\d+)", ctx.locator("body").inner_text())
-        ticket = m.group(1) if m else "unknown"
-        try:
-            click_text(ctx, "Skip", exact=True, timeout=3000)
-        except (PWError, PWTimeout):
-            pass
-        click_text(ctx, "Kick Off", exact=True)
-    except (PWError, PWTimeout) as e:
-        raise RuntimeError(f"bet placed but kick-off flow failed (ticket {ticket}): {e}")
+        click_text(ctx, "Skip", exact=True, timeout=3000)
+    except (PWError, PWTimeout):
+        pass
+    click_text(ctx, "Kick Off", exact=True)
     return ticket
 
 
@@ -868,6 +915,8 @@ def run_cycle(page, round_no):
             log.error("Balance GHS %.2f is below the GHS %.2f stake. Stopping (deposit to continue).", bal, STAKE)
             return "stop"
         log.info("=== Round #%d | balance=%s ===", round_no, bal)
+        dismiss_dialog(ctx)
+        dismiss_promo(ctx)
         clear_slip(ctx)
 
         by_league = {}
@@ -878,15 +927,28 @@ def run_cycle(page, round_no):
 
         if not by_league:
             raise RuntimeError("no league returned any fixtures")
-        sel = choose_selection(by_league)
-        if not sel:
-            log.warning("No qualifying selection this round.")
-            return "ok"
-        log.info("PICK %s: %s (%s vs %s) stars=%d odds=%.2f", sel["league"], sel["team"],
-                 sel["home"], sel["away"], sel["stars"], sel["odds"])
-
-        ensure_slip(ctx, sel)
-        ticket = place_bet(ctx)
+        global MIN_ODDS
+        rejections = 0
+        while True:
+            sel = choose_selection(by_league, MIN_ODDS)
+            if not sel:
+                log.warning("No qualifying selection this round (odds floor %.2f).", MIN_ODDS)
+                return "ok"
+            log.info("PICK %s: %s (%s vs %s) stars=%d odds=%.2f", sel["league"], sel["team"],
+                     sel["home"], sel["away"], sel["stars"], sel["odds"])
+            ensure_slip(ctx, sel)
+            try:
+                ticket = place_bet(ctx)
+                break
+            except BetRejected as e:
+                rejections += 1
+                log.warning("Bet rejected by SportyBet: %s", e)
+                if "payout" in str(e).lower() and rejections < 3:
+                    MIN_ODDS = max(MIN_ODDS, round(sel["odds"] + 0.01, 2), PAYOUT_FLOOR)
+                    log.info("Odds floor raised to %.2f; picking again.", MIN_ODDS)
+                    clear_slip(ctx)
+                    continue
+                raise
         if DRY_RUN:
             return "ok"
 
