@@ -542,8 +542,44 @@ def collect(ctx, league, n, ou=False, on_row=None):
 _OU_DUMPED = []
 
 
+def popup_open(ctx):
+    return ctx.evaluate(POPUP_JS) is not None
+
+
+def close_popup(ctx, dd=None):
+    """Make sure no goal-line list is open (a stale one would be read as the next row's)."""
+    for _ in range(3):
+        if not popup_open(ctx):
+            return True
+        try:
+            if dd is not None:
+                safe_click(dd, 3000)
+            else:
+                page_of(ctx).keyboard.press("Escape")
+        except (PWError, PWTimeout):
+            pass
+        ctx.wait_for_timeout(300)
+        if popup_open(ctx):
+            page_of(ctx).keyboard.press("Escape")
+            ctx.wait_for_timeout(250)
+    return not popup_open(ctx)
+
+
+def ou_matches(cand, line, expected):
+    """The opened list must contain this row's own default line with this row's own odds."""
+    if not cand or len(cand) < 5:
+        return False
+    if line and line in cand and expected and len(expected) == 2:
+        over, under = cand[line]
+        if over is not None and abs(over - expected[0]) > 0.011:
+            return False
+        if under is not None and abs(under - expected[1]) > 0.011:
+            return False
+    return True
+
+
 def read_ou_lines(ctx, m):
-    """Open the 'Near' goal-line dropdown of one row, read all six lines, close it again."""
+    """Open the goal-line dropdown of one row, read all six lines, close it again."""
     tag = "|".join([m["league"], m["home"], m["away"]])
     loc = ctx.locator(f'[data-bot-dd="{tag}"]')
     if not loc.count():
@@ -555,33 +591,37 @@ def read_ou_lines(ctx, m):
     dd = loc.first
     data = None
     try:
+        line = dd.get_attribute("data-specifier")
         dd.scroll_into_view_if_needed(timeout=5000)
-        safe_click(dd, 4000)
-        for _ in range(3):
-            ctx.wait_for_timeout(350)
-            data = ctx.evaluate(POPUP_JS)
-            if data and len(data) == 6:
+        close_popup(ctx)
+        for _attempt in range(3):
+            safe_click(dd, 4000)
+            for _ in range(4):
+                ctx.wait_for_timeout(300)
+                cand = ctx.evaluate(POPUP_JS)
+                if cand and ou_matches(cand, line, m.get("odds")):
+                    data = cand
+                    break
+            if data:
                 break
+            close_popup(ctx, dd)  # back to a known closed state, then try again
         if not data and "popup" not in _OU_DUMPED:
             _OU_DUMPED.append("popup")
-            log.warning("O/U: dropdown opened but lines not readable for %s (saving debug snapshot)", tag)
+            log.warning("O/U: dropdown not readable for %s (saving debug snapshot)", tag)
             debug_dump(page_of(ctx), "ou_popup_not_read")
     except (PWError, PWTimeout) as e:
         log.warning("O/U dropdown failed for %s: %s", tag, str(e).splitlines()[0])
     finally:
         try:
-            safe_click(dd, 3000)  # toggle closed
-            ctx.wait_for_timeout(250)
-            if ctx.evaluate(POPUP_JS):
-                page_of(ctx).keyboard.press("Escape")
-                ctx.wait_for_timeout(200)
+            close_popup(ctx, dd)
         except (PWError, PWTimeout):
             pass
     if not data:
+        log.warning("O/U: no lines stored for %s", tag)
         return None
     cols = {}
-    for line, (over, under) in data.items():
-        k = line.replace(".", "")
+    for line_, (over, under) in data.items():
+        k = line_.replace(".", "")
         cols[f"odds_over_{k}"], cols[f"odds_under_{k}"] = over, under  # None = locked
     if len(data) != 6:
         log.warning("%s: only %d/6 O/U lines read", tag, len(data))
@@ -677,7 +717,7 @@ def choose_selection(by_league):
 
 
 # ----------------------------------------------------------------- BETTING
-STAKE_SPAN = 'span[data-op="IV_stake_input"]:not(.m-input--quick-bet)'
+STAKE_SPAN = 'span[data-op="IV_stake_input"]:visible'
 PLACE_BET_BTN = '[data-op="IV_betslip_placeBet_cta"]:visible'
 
 
@@ -698,6 +738,17 @@ def select_odds(ctx, sel):
         if not scroll(ctx, SCROLL_FRACTION):
             break
     raise RuntimeError(f"odds cell not found: {css}")
+
+
+def clear_slip(ctx):
+    """Remove selections left in the bet slip (e.g. from a dry run): a leftover one would be
+    toggled OFF by clicking the same odds again, and the slip bar covers the bottom rows."""
+    for _ in range(6):
+        crosses = ctx.locator('[data-op="iv-betslip-cancel-cross"]:visible')
+        if not crosses.count():
+            return
+        safe_click(crosses.first, 3000)
+        ctx.wait_for_timeout(400)
 
 
 def ensure_slip(ctx, sel):
@@ -817,6 +868,7 @@ def run_cycle(page, round_no):
             log.error("Balance GHS %.2f is below the GHS %.2f stake. Stopping (deposit to continue).", bal, STAKE)
             return "stop"
         log.info("=== Round #%d | balance=%s ===", round_no, bal)
+        clear_slip(ctx)
 
         by_league = {}
         for league in LEAGUES:
