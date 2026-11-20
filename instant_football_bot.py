@@ -140,9 +140,14 @@ EXTRACT_JS = r"""
 
   for (const o of odds) { const p = nearest(P.get(o).y); if (p) p.odds.push(o); }
   if (ou) {
-    const re = /^\d\.5$/, tc = e => (e.textContent || '').trim();
-    const cand = all.filter(e => re.test(tc(e)));
-    for (const e of cand.filter(e => ![...e.children].some(c => re.test(tc(c))))) {
+    const norm = x => (x || '').replace(/[\uE000-\uF8FF]/g, '').trim();
+    let cand = [...document.querySelectorAll('[data-op="iv-event-specifier-trigger"]')].filter(e => P.has(e));
+    if (!cand.length) {  // fallback: deepest element whose text is just a goal line
+      const re = /^\d\.5$/, tc = e => norm(e.textContent);
+      const c2 = all.filter(e => re.test(tc(e)));
+      cand = c2.filter(e => ![...e.children].some(c => re.test(tc(c))));
+    }
+    for (const e of cand) {
       const p = nearest(P.get(e).y);
       if (p && !p.dd) p.dd = e;
     }
@@ -184,7 +189,7 @@ EXTRACT_JS = r"""
 POPUP_JS = r"""
 () => {
   const vis = e => e.getClientRects().length > 0;
-  const tc = e => (e.textContent || '').trim();
+  const tc = e => (e.textContent || '').replace(/[\uE000-\uF8FF]/g, '').trim();
   const all = [...document.body.querySelectorAll('*')].filter(vis);
   const deepest = re => all.filter(e => re.test(tc(e))).filter(e => ![...e.children].some(c => re.test(tc(c))));
   const cx = e => { const r = e.getBoundingClientRect(); return r.left + r.width / 2; };
