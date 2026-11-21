@@ -1,7 +1,8 @@
 // scanner.js — deterministic OCR + star counting via UMD global Tesseract (no bundler, no AI).
 export const CFG = {
-  MAX_W: 1000,       // max canvas width (mobile RAM safety)
-  BIN: 110,          // OCR threshold: pixels brighter than this become "ink"
+  MAX_W: 1400,       // max canvas width before OCR (upscales small screenshots for sharper glyphs)
+  MIN_OCR_W: 1100,   // upscale narrow screenshots up to this width so small odds stay legible
+  BIN: 105,          // OCR threshold: pixels brighter than this become "ink"
   STAR_DY: 1.55,     // star row centre = team-code centre + STAR_DY * codeHeight
   STAR_HALF: 0.6,    // star band half-height (x codeHeight)
   STAR_PITCH: 0.95,  // star spacing (x codeHeight), fallback when grey stars aren't seen
@@ -18,7 +19,7 @@ const LEAGUE_WORDS = {
   france: 'France',
   champions: 'Champions',
 };
-const ODDS_RE = /^\d{1,2}[.,]\d{2}$/;
+const ODDS_RE = /^\d{1,2}[.,]\d{1,2}$/;
 const CODE_RE = /^[A-Z]{3,4}$/;
 const WHITELIST = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:+>-';
 
@@ -69,16 +70,22 @@ async function loadCanvas(source) {
   const bmp = typeof source === 'string'
     ? await createImageBitmap(await (await fetch(source)).blob())
     : await createImageBitmap(source);
-  const s = Math.min(1, CFG.MAX_W / bmp.width);
+  let s = Math.min(1, CFG.MAX_W / bmp.width);
+  if (bmp.width * s < CFG.MIN_OCR_W) {
+    s = Math.min(CFG.MAX_W / bmp.width, CFG.MIN_OCR_W / bmp.width);
+  }
   const c = document.createElement('canvas');
   c.width = Math.round(bmp.width * s);
   c.height = Math.round(bmp.height * s);
-  c.getContext('2d', { willReadFrequently: true }).drawImage(bmp, 0, 0, c.width, c.height);
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bmp, 0, 0, c.width, c.height);
   if (bmp.close) bmp.close();
   return c;
 }
 
-function binarize(src) {
+function binarize(src, threshold = CFG.BIN) {
   const c = document.createElement('canvas');
   c.width = src.width;
   c.height = src.height;
@@ -86,7 +93,7 @@ function binarize(src) {
   const img = src.getContext('2d').getImageData(0, 0, src.width, src.height);
   const d = img.data;
   for (let i = 0; i < d.length; i += 4) {
-    const v = Math.max(d[i], d[i + 1], d[i + 2]) > CFG.BIN ? 0 : 255;
+    const v = Math.max(d[i], d[i + 1], d[i + 2]) > threshold ? 0 : 255;
     d[i] = d[i + 1] = d[i + 2] = v;
     d[i + 3] = 255;
   }
@@ -214,7 +221,7 @@ function parseWords(words, color) {
     .map((k) => ({ ...k, v: parseFloat(k.t.replace(',', '.')) }))
     .filter((k) => k.v > 1 && k.v < 100)
     .sort((a, b) => a.cy - b.cy);
-  const tol = Math.max(6, median(odds.map((k) => k.h)) * 0.6);
+  const tol = Math.max(9, median(odds.map((k) => k.h)) * 0.75);
   const clusters = [];
   for (const k of odds) {
     const c = clusters[clusters.length - 1];
@@ -298,7 +305,7 @@ export async function scanScreenshot(source, { onProgress } = {}) {
   let color = null, ocr = null;
   try {
     color = await loadCanvas(source);
-    ocr = binarize(color);
+    ocr = binarize(color, CFG.BIN);
     const words = await ocrWords(ocr, onProgress);
     freeCanvas(ocr);
     ocr = null;
