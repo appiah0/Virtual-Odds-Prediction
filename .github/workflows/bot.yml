@@ -33,6 +33,12 @@ jobs:
           DAILY_LOSS_LIMIT: "5.00"
           MAX_CONSEC_FAILS: "3"
         run: timeout 340m python instant_football_bot.py
+      - name: Check live prediction accuracy
+        if: always()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python ml/accuracy_tracker.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
