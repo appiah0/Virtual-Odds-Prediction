@@ -20,6 +20,8 @@ jobs:
       - run: |
           pip install playwright
           playwright install --with-deps chromium
+      - name: Install ML dependencies
+        run: pip install -r ml/requirements.txt
       - name: Run bot
         env:
           SPORTYBET_PHONE: ${{ secrets.SPORTYBET_PHONE }}
