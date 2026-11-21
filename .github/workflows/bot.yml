@@ -38,7 +38,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python ml/accuracy_tracker.py
+        run: python ml/accuracy_tracker.py --push-summary
       - uses: actions/upload-artifact@v4
         if: always()
         with:
