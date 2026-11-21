@@ -1,6 +1,4 @@
-// scanner.js — deterministic OCR + star counting via CDN ESM (no bundler, no AI).
-import { createWorker } from 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js';
-
+// scanner.js — deterministic OCR + star counting via UMD global Tesseract (no bundler, no AI).
 export const CFG = {
   MAX_W: 1000,       // max canvas width (mobile RAM safety)
   BIN: 110,          // OCR threshold: pixels brighter than this become "ink"
@@ -11,6 +9,7 @@ export const CFG = {
   CHECK_TAB: true,   // refuse the scan if the 1X2 tab is visibly unselected
 };
 
+const TESSERACT_SRC = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
 const LEAGUE_WORDS = {
   england: 'England',
   spain: 'Spain',
@@ -22,6 +21,37 @@ const LEAGUE_WORDS = {
 const ODDS_RE = /^\d{1,2}[.,]\d{2}$/;
 const CODE_RE = /^[A-Z]{3,4}$/;
 const WHITELIST = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:+>-';
+
+let tesseractReady = null;
+
+function ensureTesseract() {
+  if (window.Tesseract && typeof window.Tesseract.createWorker === 'function') {
+    return Promise.resolve(window.Tesseract);
+  }
+  if (!tesseractReady) {
+    tesseractReady = new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[src="${TESSERACT_SRC}"]`);
+      if (existing) {
+        existing.addEventListener('load', () => resolve(window.Tesseract), { once: true });
+        existing.addEventListener('error', () => reject(new Error('Failed to load OCR engine.')), { once: true });
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = TESSERACT_SRC;
+      s.async = true;
+      s.onload = () => {
+        if (window.Tesseract && typeof window.Tesseract.createWorker === 'function') {
+          resolve(window.Tesseract);
+        } else {
+          reject(new Error('OCR engine loaded without createWorker.'));
+        }
+      };
+      s.onerror = () => reject(new Error('Failed to load OCR engine from CDN.'));
+      document.head.appendChild(s);
+    });
+  }
+  return tesseractReady;
+}
 
 const median = (a) => {
   const s = [...a].sort((x, y) => x - y);
@@ -75,9 +105,10 @@ function flattenWords(data) {
 }
 
 async function ocrWords(canvas, onProgress) {
+  const T = await ensureTesseract();
   let worker;
   try {
-    worker = await createWorker('eng', 1, {
+    worker = await T.createWorker('eng', 1, {
       logger: (m) => {
         if (onProgress && m.status === 'recognizing text') onProgress(m.progress);
       },
