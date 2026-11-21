@@ -82,10 +82,6 @@ html,body{background:#fff;color:var(--ink);font-family:'Plus Jakarta Sans',sans-
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script>
-/* =========================================================
-   CONFIG - fill in the Supabase values (the anon key is public by design).
-   The AI vision key is NOT here. It lives in a Supabase Edge Function secret.
-   ========================================================= */
 const CONFIG = window.CONFIG || {
   SUPABASE_URL: 'https://hyxrwhgakduytptasihp.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_lJKyhjDgsKNZATFaDDwgNg_6vwJ2V_n',
@@ -94,10 +90,9 @@ const CONFIG = window.CONFIG || {
 };
 const CONFIGURED = !CONFIG.SUPABASE_URL.includes('YOUR-PROJECT');
 const BRAND = 'Virtual Odds Prediction';
-const SITE_URL = 'https://virtual-odds-prediction.vercel.app/'; // official link, used in email links
+const SITE_URL = 'https://virtual-odds-prediction.vercel.app/';
 localStorage.removeItem('iv_last_login');
 
-/* Display copy for tiers. The server (scan-odds function) holds the authoritative costs and match limits. */
 const TIERS = {
   coins: [
     { id: 'bronze',     name: 'Bronze',     amount: 1000, n: 1, desc: 'Single Match Prediction • 85% Accuracy',  icon: 'shield',        tile: 'linear-gradient(135deg,#fde68a,#fbbf24)', fg: '#b45309' },
@@ -110,16 +105,15 @@ const TIERS = {
     { id: 'master_vip', name: 'Master VIP', amount: 80, n: 5, desc: 'Maximum Accuracy Predictions • 98% Accuracy, detailed',        icon: 'wand-sparkles', tile: 'linear-gradient(135deg,#f43f5e,#be123c)', fg: '#fff' }
   ]
 };
-  /* Static stats on the dashboard. Edit by hand. */
 const STATS = {
-  readings: '94.5%',            // EDIT
-  topped:   'GH\u20B5 250K+',  // EDIT
-  members:  '15,000+'               // EDIT
+  readings: '94.5%',
+  topped:   'GH\u20B5 250K+',
+  members:  '15,000+'
 };
-  const PLATFORM = {
-  members:  '15,000+',  // EDIT: real member count
-  leagues:  '94.5%',  // leagues your reader supports
-  readings: 'GH₵ 250K+'   // EDIT: real readings done
+const PLATFORM = {
+  members:  '15,000+',
+  leagues:  '94.5%',
+  readings: 'GH₵ 250K+'
 };
 const COIN_PACKS = [
   { id: 'starter', name: 'Starter Coins Pack', price: 100, desc: '1,000 Coins for Predictions.' },
@@ -132,9 +126,6 @@ const DIAMOND_PACKS = [
   { id: 'd80', name: 'Master Diamonds Pack', price: 2800, desc: '800 Diamonds for Advanced Model Access.' }
 ];
 
-/* =========================================================
-   Helpers
-   ========================================================= */
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ic = (n, c = '') => `<i data-lucide="${n}" class="i ${c}"></i>`;
@@ -144,9 +135,6 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.ad
 function normPhone(p) { let d = String(p).replace(/\D/g, ''); if (d.startsWith('233')) d = d.slice(3); if (d.startsWith('0')) d = d.slice(1); return d; }
 const msg = e => (typeof e === 'string' ? e : e?.message || 'Something went wrong.');
 
-/* =========================================================
-   Supabase client. "Remember me" decides localStorage vs sessionStorage.
-   ========================================================= */
 const adapter = {
   getItem: k => localStorage.getItem(k) ?? sessionStorage.getItem(k),
   setItem: (k, v) => {
@@ -171,11 +159,8 @@ async function callFn(name, body, authed = true) {
   return data;
 }
 
-/* =========================================================
-   State and data
-   ========================================================= */
 const state = { me: null, members: null, packTab: 'coins', txFilter: 'all', fbRating: 0, fbDraft: '' };
-const P = { step: 'tiers', kind: 'coins', tier: null, dataUrl: null, error: '', scanId: null, result: null, resultKind: 'coins', reference: '', found: 0, avgMargin: null };
+const P = { step: 'tiers', kind: 'coins', tier: null, dataUrl: null, error: '', scanId: null, result: null, resultKind: 'coins', reference: '', found: 0, avgConfidence: null };
 
 async function loadMe() {
   const s = await session();
@@ -183,9 +168,9 @@ async function loadMe() {
   const [p, t, sc] = await Promise.all([
     sb.from('profiles').select('*').eq('id', s.user.id).maybeSingle(),
     sb.from('transactions').select('*').order('created_at', { ascending: false }).limit(100),
-    sb.from('scans').select('id,tier,allowed,created_at', { count: 'exact' }).order('created_at', { ascending: false }).limit(5),   
+    sb.from('scans').select('id,tier,allowed,created_at', { count: 'exact' }).order('created_at', { ascending: false }).limit(5),
   ]);
-  if (!p.data) { state.me = null; return null; } 
+  if (!p.data) { state.me = null; return null; }
   state.me = { email: s.user.email, ...p.data, cash: Number(p.data.cash), tx: t.data || [], scans: sc.data || [], scanCount: sc.count || 0 };
   return state.me;
 }
@@ -239,9 +224,6 @@ async function shrinkImage(file) {
   return c.toDataURL('image/jpeg', 0.85);
 }
 
-/* =========================================================
-   Shared view pieces
-   ========================================================= */
 const V = {};
 const FAQ = [
   ['How accurate are the predictions?', 'Across tens of thousands of simulated rounds, our neural algorithms have demonstrated a proven historical accuracy averaging 94.2%.'],
@@ -269,7 +251,6 @@ function phoneField(label, name, ph) {
   return `<div><label class="label" for="${name}">${label}</label><div class="flex"><span class="flex items-center gap-1 px-3 rounded-l-[14px] border-[1.5px] border-r-0 border-[var(--line)] bg-slate-50 text-sm font-bold">+233</span><input class="input !rounded-l-none" id="${name}" name="${name}" type="tel" inputmode="tel" placeholder="${ph}"></div></div>`;
 }
 
-/* Static reviews: exactly 5, no database. Edit by hand. Stars are 1-5. */
 const REVIEWS = [
   { name: 'Kwame A.', location: 'Accra', stars: 5, text: 'Turning GHS 100 into GHS 1,800 in a single weekend blew me away. These AI predictions are next-level!' },
   { name: 'Sandra N.',location: 'Takoradi', stars: 5, text: 'I was doubtful at first, but the win rate speaks volumes. Strongly recommended.' },
@@ -278,16 +259,16 @@ const REVIEWS = [
   { name: 'Akua M.', location: 'Kumasi', stars: 5, text: 'Simple to navigate and lightning-fast—the ultimate platform' }
 ];
 const AVATARS = [
-  'linear-gradient(135deg,#fbbf24,#d97706)', // amber
-  'linear-gradient(135deg,#a855f7,#7c3aed)', // purple
-  'linear-gradient(135deg,#10b981,#047857)', // green
-  'linear-gradient(135deg,#f43f5e,#be123c)', // rose
-  'linear-gradient(135deg,#38bdf8,#0369a1)'  // blue
+  'linear-gradient(135deg,#fbbf24,#d97706)',
+  'linear-gradient(135deg,#a855f7,#7c3aed)',
+  'linear-gradient(135deg,#10b981,#047857)',
+  'linear-gradient(135deg,#f43f5e,#be123c)',
+  'linear-gradient(135deg,#38bdf8,#0369a1)'
 ];
 function starRow(n, cls = '!w-[18px] !h-[18px]') {
   return [1, 2, 3, 4, 5].map(i => ic('star', (i <= n ? 'star-on' : 'star-off') + ' ' + cls)).join('');
 }
-  const ACTIVE_USERS = '15,000+'; // EDIT: type your real active-user count, e.g. '1,250' or '2K+'
+const ACTIVE_USERS = '15,000+';
 function reviewsBlock() {
   const list = REVIEWS.slice(0, 5);
   const avg = list.reduce((a, r) => a + r.stars, 0) / list.length;
@@ -403,9 +384,6 @@ function lobbyBanner() {
     <a href="${CONFIG.lobbyUrl}" target="_blank" rel="noopener" class="w-11 h-11 rounded-full bg-red-500 flex items-center justify-center flex-none" aria-label="Open SportyBet">${ic('external-link')}</a></div>`;
 }
 
-/* =========================================================
-   Pages
-   ========================================================= */
 V.landing = () => `
   <div class="relative overflow-hidden">
     <div class="absolute -top-14 -right-16 w-72 h-72 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>
@@ -494,8 +472,7 @@ V.register = () => `${head('#/')}
     <p class="text-center text-sm text-[var(--mute)] mt-5">Already registered? <a href="#/login" class="font-bold text-purple-700">Sign in</a></p>
   </main>`;
 
-V.login = () => {
-  return `${head('#/')}
+V.login = () => `${head('#/')}
   <main class="wrap pb-12">
     <h1 class="font-display font-bold text-3xl mt-2">Welcome back</h1>
     <p class="text-[var(--mute)] mt-1">Sign in with your phone number or email.</p>
@@ -518,7 +495,6 @@ V.login = () => {
     </div>
     <p class="text-center text-sm text-[var(--mute)] mt-5">New here? <a href="#/register" class="font-bold text-purple-700">Create an account</a></p>
   </main>`;
-};
 
 V.reset = () => `${head('')}
   <main class="wrap pb-12">
@@ -532,11 +508,9 @@ V.reset = () => `${head('')}
   </main>`;
 
 const PRESETS = [100, 200, 300, 500];
-const initials = u => esc((u.first_name[0] || '') + (u.last_name[0] || ''));
 const blob = '<div class="absolute -top-16 -right-16 w-64 h-64 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>';
 const miniPhone = '<div class="w-24 rounded-[18px] p-1 bg-slate-800 shadow-lg flex-none self-start"><div class="rounded-[14px] overflow-hidden bg-slate-900" style="aspect-ratio:498/964"><img src="lobby.jpg" alt="Instant Football lobby" class="w-full h-full object-cover object-top" loading="lazy"></div></div>';
 
-/* Three stat blocks: same layout and colours as the reference, but every number is real. */
 function statBlocks() {
   const items = [
     ['chart-line', 'linear-gradient(180deg,#ecfdf5,#d1fae5)', '#86efac', '#059669', STATS.readings, 'AI WIN RATE'],
@@ -697,19 +671,19 @@ function matchCard(m, detailed) {
   if (!an) return '';
   const a = { odds: [m.odds.home, m.odds.draw, m.odds.away].map(Number), p: an.p, margin: an.margin, ou: an.ou };
   const keys = ['home', 'draw', 'away'];
-  const pickIdx = keys.indexOf(an.pick); // 0 for Home, 1 for Draw, 2 for Away
+  const pickIdx = keys.indexOf(an.pick);
   const cap = ['Home', 'Draw', 'Away'], hd = ['1', 'X', '2'];
   const seg = ['#22c55e', '#f59e0b', '#6d28d9'], txt = ['#16a34a', '#d97706', '#6d28d9'];
-  
-  // Dynamic colors: Home = Green, Away = Purple, Draw = Amber
+
   const isAway = pickIdx === 2;
   const isDraw = pickIdx === 1;
-  
+
   const themeColor = isAway ? '#7c3aed' : (isDraw ? '#d97706' : '#10b981');
   const themeBg = isAway ? 'linear-gradient(135deg,#7c3aed,#5b21b6)' : (isDraw ? 'linear-gradient(135deg,#d97706,#b45309)' : 'linear-gradient(135deg,#059669,#047857)');
   const boxBg = isAway ? '#faf5ff' : (isDraw ? '#fffbeb' : '#ecfdf5');
   const badgeBg = isAway ? '#7c3aed' : (isDraw ? '#d97706' : '#10b981');
-  
+  const confVal = an.confidence ?? an.pick_prob ?? Math.max(...(a.p || [0]));
+
   const team = (t, full) => `<div class="text-center min-w-[84px] max-w-[110px]"><div class="rounded-2xl px-3 py-3 font-display font-bold text-xl bg-slate-50" style="border:1.5px solid #eef0f6">${esc(t)}</div>${full ? `<div class="text-[11px] text-slate-500 mt-1 leading-tight">${esc(full)}</div>` : ''}</div>`;
   const leagueName = m.league ? (/league|cup|champions|euro/i.test(m.league) ? m.league : m.league + ' Virtual League') : 'Virtual football';
   const ouBadge = an.ou_badge || (a.ou ? `Under ${a.ou.line} Goals` : `Margin ${a.margin.toFixed(1)}%`);
@@ -718,9 +692,9 @@ function matchCard(m, detailed) {
     <div class="flex items-center gap-2">
       <div class="flex items-center gap-1.5 text-sm font-bold text-slate-700 flex-1 min-w-0"><span class="text-purple-700 flex-none">${ic('trophy', '!w-4 !h-4')}</span><span class="truncate">${esc(leagueName)}</span></div>
       <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg whitespace-nowrap" style="background:#ede9fe;color:#5b21b6">Match ${m.match_no}</span>
-      <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 whitespace-nowrap" style="background:${boxBg};color:${isAway ? '#6b21a8' : (isDraw ? '#92400e' : '#15803d')}">${ic('check-circle', '!w-3.5 !h-3.5')} ${an.confidence}% Confidence</span>
+      <span class="text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 whitespace-nowrap" style="background:${boxBg};color:${isAway ? '#6b21a8' : (isDraw ? '#92400e' : '#15803d')}">${ic('check-circle', '!w-3.5 !h-3.5')} ${Number(confVal).toFixed(0)}% Confidence</span>
     </div>
-    
+
     <div class="flex items-center justify-between mt-4">
       ${team(m.home, m.home_full)}
       <div class="text-center"><div class="w-9 h-9 rounded-full bg-slate-900 text-white text-xs font-bold flex items-center justify-center mx-auto">VS</div><div class="text-[10px] font-extrabold tracking-wider text-purple-700 mt-1">1X2</div></div>
@@ -754,7 +728,7 @@ function matchCard(m, detailed) {
       </div>
       <span class="text-xs font-bold rounded-lg px-2.5 py-1.5 bg-white/15 whitespace-nowrap">${ouBadge}</span>
     </div>
-    
+
     ${detailed ? `<div class="mt-3 text-sm text-[var(--mute)] flex flex-wrap gap-x-4 gap-y-1"><span>Bookmaker margin: <b class="text-slate-800">${a.margin.toFixed(1)}%</b></span><span>Spread: <b class="text-slate-800">${an.spread}</b></span></div>` : ''}
   </div>`;
 }
@@ -777,7 +751,7 @@ async function copyToClipboard(text) {
       return true;
     }
   } catch (err) {}
-  
+
   try {
     const ta = document.createElement('textarea');
     ta.value = text;
@@ -794,7 +768,7 @@ async function copyToClipboard(text) {
   } catch (e) {
     return false;
   }
-                                                                                                     }
+}
 
 V.predict = u => {
   const header = `<div class="relative overflow-hidden"><div class="absolute -top-16 -right-16 w-60 h-60 rounded-full" style="background:radial-gradient(circle at 30% 30%,#e9d5ff,#c4b5fd)" aria-hidden="true"></div>
@@ -834,9 +808,9 @@ V.predict = u => {
       <div class="mt-4 rounded-[24px] p-5 text-center bg-white" style="border:1.5px solid #7dd3fc;box-shadow:0 14px 30px -20px rgba(14,165,233,.5)">
         <div id="scanIcon"><div class="ring text-sky-700">${ic('brain', '!w-8 !h-8')}</div></div>
         <div id="scanTitle" class="font-display font-bold text-lg mt-4">Scanning screenshot...</div>
-        <span id="scanPill" class="inline-block text-xs font-bold rounded-lg px-3 py-1.5 mt-2" style="background:#dcfce7;color:#15803d">Neural Vision Engine Active</span>
+        <span id="scanPill" class="inline-block text-xs font-bold rounded-lg px-3 py-1.5 mt-2" style="background:#dcfce7;color:#15803d">Local OCR &amp; XGBoost Engine Active</span>
         <div class="bar mt-5" style="height:8px"><span id="scanBar" style="width:0%;background:linear-gradient(90deg,#2563eb,#4f46e5,#10b981)"></span></div>
-        <div class="flex items-center justify-between text-xs font-bold text-slate-500 mt-2"><span id="scanPct">0%</span><span id="scanStatus" class="flex items-center gap-1.5">Uploading screenshot...</span></div>
+        <div class="flex items-center justify-between text-xs font-bold text-slate-500 mt-2"><span id="scanPct">0%</span><span id="scanStatus" class="flex items-center gap-1.5">Running local OCR...</span></div>
         <div class="dots"><span></span><span></span><span></span><span></span></div>
       </div>
       </div>`;
@@ -845,7 +819,7 @@ V.predict = u => {
     body = `<div class="wrap mt-6">
       <div class="card p-4 flex items-center gap-3 !border-purple-300 !bg-purple-50">
         <div class="w-12 h-12 rounded-2xl flex-none flex items-center justify-center" style="background:${t.tile};color:${t.fg}">${ic(t.icon)}</div>
-        <div class="flex-1"><div class="font-display font-bold">${t.name} &middot; ${t.amount.toLocaleString()} ${P.kind}</div><p class="text-xs text-[var(--mute)]">Returns ${t.n} randomly chosen match${t.n > 1 ? 'es' : ''} from the 1X2 fixtures in your screenshot</p></div>
+        <div class="flex-1"><div class="font-display font-bold">${t.name} &middot; ${t.amount.toLocaleString()} ${P.kind}</div><p class="text-xs text-[var(--mute)]">Returns ${t.n} top-confidence match${t.n > 1 ? 'es' : ''} from the 1X2 fixtures in your screenshot</p></div>
         <button data-action="changetier" class="text-sm font-bold text-purple-700">Change</button></div>
       <label id="drop" class="drop block p-6 text-center cursor-pointer mt-4" for="file">
         ${P.dataUrl ? `<img src="${P.dataUrl}" alt="Selected screenshot" class="max-h-64 mx-auto rounded-xl">` : `<div class="w-14 h-14 mx-auto rounded-2xl bg-white text-purple-600 flex items-center justify-center shadow">${ic('image-up', 'i-lg')}</div><div class="font-display font-bold mt-3">Upload match screenshot</div><p class="text-sm text-[var(--mute)] mt-1">Drag and drop, or tap to pick from your gallery.<br>PNG, JPG or WEBP</p>`}
@@ -855,11 +829,11 @@ V.predict = u => {
       <button data-action="scan" class="btn btn-primary w-full mt-4" ${P.dataUrl ? '' : 'disabled'}>${ic('wand-sparkles')} Scan screenshot</button>
       ${P.dataUrl ? '<button data-action="clearimg" class="btn btn-ghost w-full mt-2 !py-3 text-sm">Remove screenshot</button>' : ''}</div>`;
   } else if (P.step === 'result') {
-    const avg = P.avgMargin == null ? '-' : Number(P.avgMargin).toFixed(1);
+    const avg = P.avgConfidence == null ? '-' : Number(P.avgConfidence).toFixed(1);
     body = `<div class="wrap mt-6 space-y-3">
       <div class="flex items-center justify-between gap-2"><h2 class="font-display font-bold text-xl">Your readings</h2><span class="chip text-xs">${esc(P.tier.name)} &middot; ${P.found} fixtures read</span></div>
       ${P.result.map(m => matchCard(m, P.resultKind === 'diamonds')).join('')}
-      <div class="card p-4 flex items-center gap-3"><div class="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic('trending-up')}</div><div><div class="text-[11px] font-extrabold tracking-wider text-[var(--mute)]">AVG BOOKMAKER MARGIN</div><div class="font-display font-bold text-xl">${avg}%</div></div></div>
+      <div class="card p-4 flex items-center gap-3"><div class="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic('trending-up')}</div><div><div class="text-[11px] font-extrabold tracking-wider text-[var(--mute)]">AVG CONFIDENCE</div><div class="font-display font-bold text-xl">${avg}%</div></div></div>
       <div class="card p-4 flex items-center gap-3"><div class="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic('ticket')}</div><div class="flex-1"><div class="text-[11px] font-extrabold tracking-wider text-[var(--mute)]">READING REFERENCE</div><div class="font-display font-bold text-xl text-purple-800">${esc(P.reference)}</div></div><button data-action="copycode" class="chip font-bold">${ic('copy')} Copy</button></div>
       <button data-action="copyslip" class="btn btn-green w-full">${ic('clipboard-copy')} Copy reading summary</button>
       <button data-action="newread" class="btn btn-ghost w-full">${ic('rotate-ccw')} New reading</button></div>`;
@@ -867,7 +841,6 @@ V.predict = u => {
   return header + body + '<div class="h-28"></div>';
 };
 
-/* ---------- shared page header: logo + welcome row, then title ---------- */
 function welcomeRow(u) {
   return `<div class="wrap pt-5 relative flex items-center justify-between">
     <div class="flex items-center gap-3"><img src="logo.png" alt="" class="w-12 h-12 rounded-full shadow"><div class="font-display font-bold text-xl">Welcome ${esc(u.first_name)}!</div></div>
@@ -879,7 +852,6 @@ function pageHead(u, title, sub, icon, iconCls) {
   return `<div class="relative overflow-hidden">${blob}${welcomeRow(u)}<div class="wrap mt-4 relative">${t}</div></div>`;
 }
 
-/* ---------- Guide ---------- */
 const GUIDE_STEPS = [
   ['gamepad-2', 'Open Instant Football Games Lobby', 'Log into your bookmaker or virtual games provider and open the Instant Football lobby on your phone.'],
   ['camera', 'Capture The Match Round Screen', 'Take a screenshot of the fixture screen with the 1, X and 2 odds visible for every match.'],
@@ -902,7 +874,6 @@ V.guide = u => `${pageHead(u, 'How To Play & Win', 'Master the Instant Football 
   </div>
   <div class="h-32"></div>${u ? nav('guide') : ''}`;
 
-/* ---------- About ---------- */
 V.about = u => {
   const side = (col, bg, ic1, t, d) => `<div class="card p-4 flex gap-4" style="border-left:4px solid ${col};border-top-left-radius:22px;border-bottom-left-radius:22px"><div class="w-12 h-12 rounded-2xl flex-none flex items-center justify-center" style="background:${bg};color:${col}">${ic(ic1, 'i-lg')}</div><div><div class="font-display font-bold text-lg">${t}</div><p class="text-sm text-[var(--mute)] mt-1">${d}</p></div></div>`;
   const step = (col, bg, ic1, n, t, d) => `<div class="card p-4" style="border-top:4px solid ${col}"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-xl flex-none flex items-center justify-center" style="background:${bg};color:${col}">${ic(ic1)}</div><div class="font-display font-bold text-[17px] flex-1 leading-tight">${t}</div><span class="text-[11px] font-extrabold px-2.5 py-1 rounded-lg" style="background:${bg};color:${col}">STEP ${n}</span></div><p class="text-sm text-[var(--mute)] mt-3">${d}</p></div>`;
@@ -949,7 +920,6 @@ V.about = u => {
   ${footer()}<div class="h-20"></div>${u ? nav('about') : ''}`;
 };
 
-/* ---------- Feedback ---------- */
 V.feedback = u => `${pageHead(u, 'Feedback', 'Tell us what is working and what we should improve.', 'star', 'text-amber-500')}
   <div class="wrap mt-5">
     <div class="card p-5">
@@ -961,7 +931,6 @@ V.feedback = u => `${pageHead(u, 'Feedback', 'Tell us what is working and what w
     </div>
   </div><div class="h-32"></div>`;
 
-/* ---------- Report an Issue ---------- */
 const ISSUE_TYPES = ['Payment / Deposit approval delay', 'Coins or diamonds not credited', 'Screenshot scan failed or unreadable', 'Login or account problem', 'Something else'];
 V.report = u => {
   const s = CONFIG.support;
@@ -987,8 +956,6 @@ V.report = u => {
   </div><div class="h-32"></div>`;
 };
 
-/* Sends a ticket or feedback to the developer's email through a form handler (Formspree-style endpoint).
-   If CONFIG.FORM_ENDPOINT is empty it falls back to opening the user's email app. */
 async function sendToDeveloper(payload) {
   const me = state.me || {};
   const data = {
@@ -1035,16 +1002,6 @@ V.profile = u => {
   </div><div class="h-28"></div>`;
 };
 
-/* =========================================================
-   Router
-   ========================================================= */
-/* =========================================================
-   Paystack checkout + live wallet updates
-   ========================================================= */
-/* =========================================================
-   Popups and Paystack checkout
-   ========================================================= */
-
 function popup({ icon = 'circle-check', tone = 'green', title, text, button = 'Continue' }) {
   return new Promise(resolve => {
     const t = tone === 'purple' ? ['#f5f3ff', '#7c3aed'] : ['#ecfdf5', '#059669'];
@@ -1060,9 +1017,8 @@ function popup({ icon = 'circle-check', tone = 'green', title, text, button = 'C
   });
 }
 
-/* Returns 'successful' | 'failed' | 'canceled' | 'pending'. Callers decide what to show. */
 async function confirmPayment(ref) {
-  for (let i = 0; i < 24; i++) { // MoMo approvals can take a minute
+  for (let i = 0; i < 24; i++) {
     const r = await callFn('paystack-verify', { reference: ref });
     if (r.status === 'successful') return 'successful';
     if (r.status === 'failed') return 'failed';
@@ -1081,15 +1037,12 @@ async function pay(payload) {
     });
   });
   if (outcome === 'cancel') {
-    // Closing the pop-up marks the transaction Canceled (unless Paystack says it was actually paid).
     try { const r = await callFn('paystack-verify', { reference: init.reference, cancel: true }); return r.status === 'successful' ? 'successful' : 'canceled'; }
     catch { return 'canceled'; }
   }
   toast('Confirming your payment...');
   return confirmPayment(init.reference);
 }
-/* Self-healing: asks the server to re-check recent unpaid-looking payments with Paystack and credit any that
-   actually succeeded (covers slow MoMo approvals and a missed webhook). Safe to run repeatedly. */
 let reconAt = 0;
 async function reconcilePayments(force) {
   if (!force && Date.now() - reconAt < 45000) return 0;
@@ -1153,9 +1106,6 @@ sb.auth.onAuthStateChange(ev => {
   if (ev === 'SIGNED_OUT') { state.me = null; }
 });
 
-/* =========================================================
-   Events
-   ========================================================= */
 function showErr(m) { const e = $('#formErr'); if (e) { e.textContent = m; e.classList.toggle('hidden', !m); } }
 async function go(fn) { try { await fn(); } catch (e) { toast(msg(e)); } }
 
@@ -1247,7 +1197,6 @@ document.addEventListener('click', async e => {
       } finally { b.disabled = false; }
     }); break;
     case 'logout': Auth.logout(); break;
-    /* predictions flow */
     case 'ptab': P.kind = v; render(); break;
     case 'pickTier': P.tier = TIERS[P.kind].find(t => t.id === b.dataset.id); P.step = 'upload'; P.error = ''; render(); break;
     case 'changetier': P.step = 'tiers'; render(); break;
@@ -1255,7 +1204,7 @@ document.addEventListener('click', async e => {
     case 'scan': runScan(); break;
     case 'copycode': copyToClipboard(P.reference).then(ok => toast(ok ? 'Reference copied.' : 'Could not copy. Select and copy it manually.')); break;
     case 'copyslip': copyToClipboard(readingText()).then(ok => toast(ok ? 'Reading summary copied.' : 'Could not copy. Try again.')); break;
-    case 'newread': Object.assign(P, { step: 'tiers', dataUrl: null, error: '', scanId: null, result: null }); render(); break;
+    case 'newread': Object.assign(P, { step: 'tiers', dataUrl: null, error: '', scanId: null, result: null, avgConfidence: null }); render(); break;
   }
 });
 
@@ -1271,8 +1220,8 @@ document.addEventListener('drop', e => { const d = e.target.closest('#drop'); if
 async function runScan() {
   const t = P.tier;
   P.step = 'scanning'; P.error = ''; await render();
-  const stageA = ['Uploading screenshot...', 'Reading fixture rows...', 'Checking the 1X2 market...'];
-  const stageB = ['Extracting odds...', 'Calculating implied probabilities...', 'Preparing your readings...'];
+  const stageA = ['Running local OCR...', 'Reading fixture rows & stars...', 'Checking the 1X2 market...'];
+  const stageB = ['Matching XGBoost predictions...', 'Computing match confidence...', 'Preparing your readings...'];
   let pct = 0, stage = 'A';
   const timer = setInterval(() => {
     pct = Math.min(90, pct + Math.random() * 6 + 2);
@@ -1283,7 +1232,7 @@ async function runScan() {
       stage = next;
       const icon = $('#scanIcon'), title = $('#scanTitle'), pill = $('#scanPill');
       if (icon) icon.innerHTML = `<div class="w-[84px] h-[84px] rounded-[22px] mx-auto flex items-center justify-center shadow-lg" style="background:linear-gradient(135deg,#1e1b4b,#312e81);color:#facc15">${ic('zap', '!w-9 !h-9')}</div>`;
-      if (title) title.textContent = 'Connecting to the odds engine...';
+      if (title) title.textContent = 'Matching with XGBoost model...';
       if (pill) pill.textContent = 'Preparing your readings';
       lucide.createIcons();
     }
@@ -1291,27 +1240,36 @@ async function runScan() {
   }, 350);
 
   try {
-    // 1. Get scanned matches from your odds scanner
-    const r = await callFn('scan-odds', { action: 'scan', tier: t.id, image: P.dataUrl.split(',')[1] });
-
-    // 2. PASS MATCHES THROUGH TRUE MONTE CARLO SIMULATION
-    try {
-      const mcResponse = await callFn('predict-monte-carlo', { matches: r.matches });
-      r.matches.forEach((m, i) => {
-        const prediction = mcResponse.results[i];
-        if (prediction && prediction.source === 'monte-carlo') {
-          m.analysis = m.analysis || {};
-          m.analysis.p = prediction.p; // Updates percentages with [Home%, Draw%, Away%] from simulation
-          m.analysis.source = 'monte-carlo';
-          m.analysis.expected_goals = prediction.expected_goals;
+    const { scanScreenshot } = await import('./scanner.js');
+    const scan = await scanScreenshot(P.dataUrl, {
+      onProgress: (prog) => {
+        const mapped = Math.min(55, Math.round(prog * 55));
+        if (mapped > pct) {
+          pct = mapped;
+          const bar = $('#scanBar'), p = $('#scanPct');
+          if (bar) bar.style.width = pct + '%';
+          if (p) p.textContent = pct + '%';
         }
-      });
-    } catch (mcErr) {
-      console.error('Monte Carlo simulation overlay error:', mcErr);
-    }
+      },
+    });
+
+    const r = await callFn('scan-odds', {
+      action: 'scan',
+      tier: t.id,
+      market: scan.market,
+      matches: scan.matches,
+    });
 
     clearInterval(timer);
-    Object.assign(P, { scanId: r.scan_id, result: r.matches, resultKind: r.kind, reference: r.reference, found: r.found, avgMargin: r.avg_margin, step: 'result' });
+    Object.assign(P, {
+      scanId: r.scan_id,
+      result: r.matches,
+      resultKind: r.kind,
+      reference: r.reference,
+      found: r.found,
+      avgConfidence: r.avg_confidence ?? r.avg_model_prob ?? null,
+      step: 'result',
+    });
   } catch (err) {
     clearInterval(timer);
     P.error = msg(err); P.step = 'upload';
