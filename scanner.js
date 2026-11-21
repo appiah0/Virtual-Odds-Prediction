@@ -293,7 +293,7 @@ function parseWords(words, color) {
     });
   }
   if (!out.length) {
-    throw new Error('Found odds but could not read team codes. Try a clearer screenshot.');
+    throw new Error('Could not read fixture rows from that screenshot. Try a clearer 1X2 lobby capture.');
   }
   return {
     market: tab.selected === false ? null : '1X2',
@@ -309,7 +309,11 @@ export async function scanScreenshot(source, { onProgress } = {}) {
     const words = await ocrWords(ocr, onProgress);
     freeCanvas(ocr);
     ocr = null;
-    return parseWords(words, color);
+    const parsed = parseWords(words, color);
+    if (!Array.isArray(parsed.matches) || parsed.matches.length === 0) {
+      throw new Error('No fixtures detected in screenshot.');
+    }
+    return parsed;
   } finally {
     freeCanvas(ocr);
     freeCanvas(color);

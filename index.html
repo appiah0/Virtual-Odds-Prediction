@@ -1240,7 +1240,7 @@ async function runScan() {
   }, 350);
 
   try {
-    const { scanScreenshot } = await import('./scanner.js');
+    const { scanScreenshot } = await import('./scanner.js?v=3');
     const scan = await scanScreenshot(P.dataUrl, {
       onProgress: (prog) => {
         const mapped = Math.min(55, Math.round(prog * 55));
