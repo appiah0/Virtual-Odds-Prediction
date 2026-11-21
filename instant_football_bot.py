@@ -5,9 +5,10 @@ SportyBet Instant Football scraper + bet bot (Playwright sync API) - v2.
 Per bot cycle ("round #N", numbered sequentially and shared by both leagues):
   1. Scrape Spain (10 fixtures) and Germany (9 fixtures): stars, 1X2, O/U (all six goal
      lines via the "Near" dropdown), Double Chance, GG/NG  -> Supabase `scraped_fixtures`.
-  2. Pick exactly ONE match from ONE league (Spain OR Germany): most stars, then lowest odds.
+  2. Score pre-match fixtures with XGBoost -> Supabase `live_predictions`.
+  3. Pick exactly ONE match from ONE league (Spain OR Germany): most stars, then lowest odds.
      Stake GHS 0.10, place bet, kick off.
-  3. Scrape final scores for all 19 fixtures and update the same rows (H/D/A outcome),
+  4. Scrape final scores for all 19 fixtures and update the same rows (H/D/A outcome),
      never overwriting the pre-match odds.
 
 Env vars:
@@ -32,6 +33,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright, Error as PWError, TimeoutError as PWTimeout
+
+# Make `ml/` importable regardless of current working directory
+ML_DIR = Path(__file__).resolve().parent / "ml"
+if ML_DIR.exists() and str(ML_DIR) not in sys.path:
+    sys.path.insert(0, str(ML_DIR))
+
+try:
+    from push_predictions import score_and_push_fixtures
+except Exception:
+    score_and_push_fixtures = None
 
 # ----------------------------------------------------------------- CONFIG
 BASE_URL = "https://www.sportybet.com/gh/"
@@ -331,6 +342,25 @@ def update_result(fixture_key, home_score, away_score):
     sb("PATCH", f"scraped_fixtures?fixture_key=eq.{urllib.parse.quote(fixture_key, safe='')}",
        {**fields, "updated_at": now_iso()}, {"Prefer": "return=minimal"})
     return outcome
+
+
+def push_round_predictions(by_league, round_no):
+    """Score scraped pre-match fixtures with XGBoost and push to Supabase live_predictions."""
+    if not score_and_push_fixtures:
+        return
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return
+    if SUPABASE_KEY and not os.environ.get("SUPABASE_SERVICE_ROLE_KEY"):
+        os.environ["SUPABASE_SERVICE_ROLE_KEY"] = SUPABASE_KEY
+
+    all_rows = [r for rows in by_league.values() for r in rows]
+    if not all_rows:
+        return
+    try:
+        pushed = score_and_push_fixtures(all_rows)
+        log.info("Round #%d: pushed %d XGBoost predictions to live_predictions", round_no, len(pushed))
+    except Exception as e:
+        log.warning("Round #%d: live_predictions push failed: %s", round_no, e)
 
 
 def next_round_no():
@@ -927,6 +957,10 @@ def run_cycle(page, round_no):
 
         if not by_league:
             raise RuntimeError("no league returned any fixtures")
+
+        # Score pre-match fixtures and push probabilities to Supabase `live_predictions`
+        push_round_predictions(by_league, round_no)
+
         global MIN_ODDS
         rejections = 0
         while True:
