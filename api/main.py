@@ -13,7 +13,7 @@ ML_DIR = ROOT / "ml"
 if str(ML_DIR) not in sys.path:
     sys.path.insert(0, str(ML_DIR))
 
-from features import FEATURES, OU_LINES, _two_way_prob
+from features import FEATURES, OU_LINES
 
 MODEL_PATH = ML_DIR / "instant_football_xgb.joblib"
 bundle = joblib.load(MODEL_PATH)
@@ -29,6 +29,12 @@ class OddsInput(BaseModel):
     away: float
 
 
+class OverUnderInput(BaseModel):
+    line: Optional[float] = None
+    over: Optional[float] = None
+    under: Optional[float] = None
+
+
 class MatchInput(BaseModel):
     league: Optional[str] = "Spain"
     home: str
@@ -36,12 +42,28 @@ class MatchInput(BaseModel):
     home_stars: Optional[float] = 3.0
     away_stars: Optional[float] = 3.0
     odds: OddsInput
+    over_under: Optional[OverUnderInput] = None
     home_profile: Optional[Dict[str, Any]] = None
     away_profile: Optional[Dict[str, Any]] = None
 
 
 class PredictRequest(BaseModel):
     matches: List[MatchInput]
+
+
+def _pick_num(prof: Optional[Dict[str, Any]], keys: List[str]) -> float:
+    if not isinstance(prof, dict):
+        return np.nan
+    for k in keys:
+        v = prof.get(k)
+        if v is not None and v != "":
+            try:
+                f = float(v)
+                if not np.isnan(f):
+                    return f
+            except (TypeError, ValueError):
+                pass
+    return np.nan
 
 
 def _build_rows(matches: List[MatchInput]) -> pd.DataFrame:
@@ -55,7 +77,15 @@ def _build_rows(matches: List[MatchInput]) -> pd.DataFrame:
         raw_h = 1.0 / oh if oh > 1.0 else np.nan
         raw_d = 1.0 / od if od > 1.0 else np.nan
         raw_a = 1.0 / oa if oa > 1.0 else np.nan
-        tot = np.nansum([raw_h, raw_d, raw_a]) if not any(np.isnan([raw_h, raw_d, raw_a])) else np.nan
+        tot = (
+            np.nansum([raw_h, raw_d, raw_a])
+            if not any(np.isnan([raw_h, raw_d, raw_a]))
+            else np.nan
+        )
+
+        imp_h = (raw_h / tot) if (tot and not np.isnan(tot)) else np.nan
+        imp_d = (raw_d / tot) if (tot and not np.isnan(tot)) else np.nan
+        imp_a = (raw_a / tot) if (tot and not np.isnan(tot)) else np.nan
 
         row: Dict[str, Any] = {
             "league": lg,
@@ -68,11 +98,11 @@ def _build_rows(matches: List[MatchInput]) -> pd.DataFrame:
             "odds_draw": od,
             "odds_away": oa,
             "vig_1x2": (tot - 1.0) if not np.isnan(tot) else np.nan,
-            "imp_home": (raw_h / tot) if (tot and not np.isnan(tot)) else np.nan,
-            "imp_draw": (raw_d / tot) if (tot and not np.isnan(tot)) else np.nan,
-            "imp_away": (raw_a / tot) if (tot and not np.isnan(tot)) else np.nan,
+            "imp_home": imp_h,
+            "imp_draw": imp_d,
+            "imp_away": imp_a,
             "imp_home_away_diff": (
-                (raw_h / tot) - (raw_a / tot) if (tot and not np.isnan(tot)) else np.nan
+                (imp_h - imp_a) if not (np.isnan(imp_h) or np.isnan(imp_a)) else np.nan
             ),
             "slope_15_25": np.nan,
             "slope_25_35": np.nan,
@@ -82,13 +112,34 @@ def _build_rows(matches: List[MatchInput]) -> pd.DataFrame:
         for l in OU_LINES:
             row[f"imp_over_{l}"] = np.nan
 
-        for side, prof in (("home", m.home_profile or {}), ("away", m.away_profile or {})):
-            gf = prof.get(f"{side}_gf_ma5") if prof.get(f"{side}_gf_ma5") is not None else prof.get("gf_ma5")
-            ga = prof.get(f"{side}_ga_ma5") if prof.get(f"{side}_ga_ma5") is not None else prof.get("ga_ma5")
-            pts = prof.get(f"{side}_pts_ma5") if prof.get(f"{side}_pts_ma5") is not None else prof.get("pts_ma5")
-            row[f"{side}_roll5_gf"] = float(gf) if gf is not None else np.nan
-            row[f"{side}_roll5_ga"] = float(ga) if ga is not None else np.nan
-            row[f"{side}_roll5_pts"] = float(pts) if pts is not None else np.nan
+        if m.over_under and m.over_under.over and m.over_under.under:
+            oo, ou = float(m.over_under.over), float(m.over_under.under)
+            if oo > 1.0 and ou > 1.0:
+                ro, ru = 1.0 / oo, 1.0 / ou
+                p_over = ro / (ro + ru)
+                line_str = str(m.over_under.line or "")
+                tag_map = {
+                    "0.5": "05",
+                    "1.5": "15",
+                    "2.5": "25",
+                    "3.5": "35",
+                    "4.5": "45",
+                    "5.5": "55",
+                }
+                tag = tag_map.get(line_str)
+                if tag:
+                    row[f"imp_over_{tag}"] = p_over
+
+        for side, prof in (("home", m.home_profile), ("away", m.away_profile)):
+            row[f"{side}_roll5_gf"] = _pick_num(
+                prof, [f"{side}_roll5_gf", f"{side}_gf_ma5", "roll5_gf", "gf_ma5", "avg_gf"]
+            )
+            row[f"{side}_roll5_ga"] = _pick_num(
+                prof, [f"{side}_roll5_ga", f"{side}_ga_ma5", "roll5_ga", "ga_ma5", "avg_ga"]
+            )
+            row[f"{side}_roll5_pts"] = _pick_num(
+                prof, [f"{side}_roll5_pts", f"{side}_pts_ma5", "roll5_pts", "pts_ma5", "avg_pts"]
+            )
 
         row["roll5_gf_diff"] = row["home_roll5_gf"] - row["away_roll5_gf"]
         row["roll5_ga_diff"] = row["home_roll5_ga"] - row["away_roll5_ga"]
@@ -96,10 +147,6 @@ def _build_rows(matches: List[MatchInput]) -> pd.DataFrame:
         rows.append(row)
 
     df = pd.DataFrame(rows)
-    for c in OU_LINES:
-        col = f"imp_over_{c}"
-        if col not in df.columns:
-            df[col] = np.nan
     for col in feat_cols:
         if col not in df.columns:
             df[col] = np.nan
