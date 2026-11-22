@@ -27,6 +27,13 @@ jobs:
           python train.py
           python predict.py || true
 
+      - name: Inspect model vs bookmaker divergence
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        working-directory: ml
+        run: python inspect_divergence.py
+
       - name: Upload trained model artifact
         uses: actions/upload-artifact@v4
         with:
