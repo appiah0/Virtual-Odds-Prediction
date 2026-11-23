@@ -13,7 +13,7 @@ SEED = 42
 MIN_EDGE = 0.04  # 4 percentage points above bookmaker implied probability
 
 BLEND_ALPHAS = {
-    "1x2": 0.25,
+    "1x2": 0.35,
     "ou_1.5": 0.35,
     "ou_2.5": 0.35,
     "ou_3.5": 0.35,
