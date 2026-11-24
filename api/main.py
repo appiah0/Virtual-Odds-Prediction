@@ -7,6 +7,16 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+import sys
+from pathlib import Path
+
+_API_DIR = Path(__file__).resolve().parent
+_REPO_ROOT = _API_DIR.parent
+for _candidate in (_REPO_ROOT, _REPO_ROOT / "ml", _API_DIR):
+    _path_str = str(_candidate)
+    if _path_str not in sys.path:
+        sys.path.insert(0, _path_str)
+
 from features import FEATURES, OU_TARGETS, build_features
 
 ARTIFACT_PATH = os.getenv("MODEL_ARTIFACT_PATH", "instant_football_xgb.joblib")
