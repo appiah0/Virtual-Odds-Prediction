@@ -59,14 +59,14 @@ X1X2_FEATURES = [c for c in PREFERRED_1X2 if c in FEATURES] or list(FEATURES)
 OU_FEATURES = [c for c in FEATURES if c in PREFERRED_1X2] or list(FEATURES)
 
 BASE_1X2 = dict(
-    n_estimators=180,
+    n_estimators=160,
     max_depth=2,
-    learning_rate=0.02,
+    learning_rate=0.015,
     subsample=0.75,
-    colsample_bytree=0.7,
-    min_child_weight=25,
-    reg_alpha=2.0,
-    reg_lambda=10.0,
+    colsample_bytree=0.6,
+    min_child_weight=30,
+    reg_alpha=2.5,
+    reg_lambda=12.0,
     tree_method="hist",
     random_state=SEED,
     n_jobs=-1,
@@ -87,6 +87,7 @@ BASE_OU = dict(
 )
 
 BASE = BASE_1X2
+
 
 def _log_odds_margin(probs_3col):
     p = np.asarray(probs_3col, dtype=float).copy()
