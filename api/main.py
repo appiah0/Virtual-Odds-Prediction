@@ -1,4 +1,6 @@
 import os
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import joblib
@@ -6,9 +8,6 @@ import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-
-import sys
-from pathlib import Path
 
 _API_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _API_DIR.parent
@@ -66,10 +65,25 @@ def _blend_binary(p_xgb: np.ndarray, p_book: np.ndarray, alpha: float) -> np.nda
     return np.clip(out, 0.0, 1.0)
 
 
+def _resolve_artifact_path() -> Path:
+    candidates = [
+        Path(ARTIFACT_PATH),
+        _REPO_ROOT / ARTIFACT_PATH,
+        _REPO_ROOT / "ml" / "instant_football_xgb.joblib",
+        _API_DIR / "instant_football_xgb.joblib",
+        Path("ml/instant_football_xgb.joblib"),
+    ]
+    for cand in candidates:
+        if cand.exists():
+            return cand.resolve()
+    raise RuntimeError(
+        f"Model artifact not found at {ARTIFACT_PATH}. Checked: {[str(c) for c in candidates]}"
+    )
+
+
 def _load_bundle():
-    if not os.path.exists(ARTIFACT_PATH):
-        raise RuntimeError(f"Model artifact not found at {ARTIFACT_PATH}")
-    bundle = joblib.load(ARTIFACT_PATH)
+    resolved_path = _resolve_artifact_path()
+    bundle = joblib.load(resolved_path)
     models = bundle.get("models", {})
     x1x2_feats = bundle.get("1x2_features") or bundle.get("features") or list(FEATURES)
     ou_feats = bundle.get("ou_features") or x1x2_feats
@@ -80,10 +94,10 @@ def _load_bundle():
         "ou_3.5": 0.35,
     }
     draw_mult = float(bundle.get("draw_mult", 0.85))
-    return models, x1x2_feats, ou_feats, blend_alphas, draw_mult
+    return models, x1x2_feats, ou_feats, blend_alphas, draw_mult, str(resolved_path)
 
 
-MODELS, X1X2_FEATS, OU_FEATS, BLEND_ALPHAS, DRAW_MULT = _load_bundle()
+MODELS, X1X2_FEATS, OU_FEATS, BLEND_ALPHAS, DRAW_MULT, RESOLVED_ARTIFACT_PATH = _load_bundle()
 
 
 def _matches_to_feature_df(matches: List[MatchInput]) -> pd.DataFrame:
@@ -130,7 +144,7 @@ def _matches_to_feature_df(matches: List[MatchInput]) -> pd.DataFrame:
 def health():
     return {
         "status": "ok",
-        "artifact": ARTIFACT_PATH,
+        "artifact": RESOLVED_ARTIFACT_PATH,
         "blend_alphas": BLEND_ALPHAS,
         "draw_mult": DRAW_MULT,
     }
