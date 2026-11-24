@@ -24,6 +24,8 @@ PREFERRED_LEAN = [
     "home_stars",
     "away_stars",
     "star_diff",
+    "star_share_home",
+    "star_odds_gap_home",
     "odds_home",
     "odds_draw",
     "odds_away",
@@ -32,6 +34,8 @@ PREFERRED_LEAN = [
     "imp_away",
     "vig_1x2",
     "imp_home_away_diff",
+    "imp_fav_max",
+    "imp_fav_underdog_gap",
     "imp_over_05",
     "imp_over_15",
     "imp_over_25",
@@ -39,27 +43,62 @@ PREFERRED_LEAN = [
     "slope_15_25",
     "slope_25_35",
     "imp_gg",
+    "imp_1x",
+    "imp_12",
+    "imp_2x",
     "home_roll5_gf",
     "home_roll5_ga",
     "away_roll5_gf",
     "away_roll5_ga",
     "roll5_pts_diff",
+    "roll5_gd_diff",
 ]
 
 LEAN_FEATURES = [c for c in PREFERRED_LEAN if c in FEATURES] or list(FEATURES)
 
 BASE = dict(
-    n_estimators=300,
+    n_estimators=250,
     max_depth=3,
-    learning_rate=0.03,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    min_child_weight=5,
-    reg_lambda=2.0,
+    learning_rate=0.025,
+    subsample=0.75,
+    colsample_bytree=0.7,
+    min_child_weight=15,
+    reg_alpha=1.0,
+    reg_lambda=5.0,
     tree_method="hist",
     random_state=SEED,
     n_jobs=-1,
 )
+
+
+def _log_odds_margin(probs_3col):
+    p = np.asarray(probs_3col, dtype=float).copy()
+    bad = ~np.isfinite(p) | (p <= 1e-6)
+    p[bad] = 1.0 / 3.0
+    p = p / p.sum(axis=1, keepdims=True)
+    return np.log(np.clip(p, 1e-6, 1.0))
+
+
+def _fit_1x2_with_margin(X_tr, y_tr, margin_tr):
+    est = XGBClassifier(
+        objective="multi:softprob",
+        num_class=3,
+        eval_metric="mlogloss",
+        **BASE,
+    )
+    try:
+        cal = CalibratedClassifierCV(est, method="sigmoid", cv=TimeSeriesSplit(n_splits=5))
+        cal.fit(X_tr, y_tr, base_margin=margin_tr)
+        return cal, True
+    except TypeError:
+        est.fit(X_tr, y_tr, base_margin=margin_tr)
+        return est, False
+
+
+def _predict_1x2_with_margin(model, uses_margin, X_te, margin_te):
+    if not uses_margin:
+        return model.predict_proba(X_te, base_margin=margin_te)
+    return model.predict_proba(X_te)
 
 
 def calibrated(estimator):
@@ -103,19 +142,16 @@ def main():
 
     models, metrics = {}, {}
 
-    # ---- Model 1: 1X2 ----
+    # ---- Model 1: 1X2 (anchored to bookmaker log-odds margin) ----
     a_1x2 = BLEND_ALPHAS["1x2"]
-    m1 = calibrated(
-        XGBClassifier(
-            objective="multi:softprob",
-            num_class=3,
-            eval_metric="mlogloss",
-            **BASE,
-        )
-    )
-    m1.fit(tr[LEAN_FEATURES], tr["y_1x2"].astype(int))
+    margin_tr = _log_odds_margin(tr[["imp_home", "imp_draw", "imp_away"]].values)
+    margin_te = _log_odds_margin(te[["imp_home", "imp_draw", "imp_away"]].values)
 
-    p = m1.predict_proba(te[LEAN_FEATURES])
+    m1, uses_margin = _fit_1x2_with_margin(
+        tr[LEAN_FEATURES], tr["y_1x2"].astype(int).values, margin_tr
+    )
+
+    p = _predict_1x2_with_margin(m1, uses_margin, te[LEAN_FEATURES], margin_te)
     y = te["y_1x2"].astype(int).values
     b = te[["imp_home", "imp_draw", "imp_away"]].values
     p_blend = _blend_1x2(p, b, a_1x2)
@@ -131,6 +167,7 @@ def main():
 
     metrics["1x2"] = {
         "blend_alpha": a_1x2,
+        "uses_base_margin": uses_margin,
         "xgb_logloss": float(log_loss(y[ok], p[ok], labels=[0, 1, 2])),
         "blend_logloss": float(log_loss(y[ok], p_blend[ok], labels=[0, 1, 2])),
         "book_logloss": float(log_loss(y[ok], b[ok], labels=[0, 1, 2])),
