@@ -1,5 +1,4 @@
-import sys
-from pathlib import Path
+import os
 from typing import Any, Dict, List, Optional
 
 import joblib
@@ -8,31 +7,11 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-ROOT = Path(__file__).resolve().parent.parent
-ML_DIR = ROOT / "ml"
-if str(ML_DIR) not in sys.path:
-    sys.path.insert(0, str(ML_DIR))
+from features import FEATURES, OU_TARGETS, build_features
 
-from features import FEATURES, OU_LINES
+ARTIFACT_PATH = os.getenv("MODEL_ARTIFACT_PATH", "instant_football_xgb.joblib")
 
-MODEL_PATH = ML_DIR / "instant_football_xgb.joblib"
-bundle = joblib.load(MODEL_PATH)
-models = bundle["models"]
-feat_cols = bundle.get("features", FEATURES)
-
-app = FastAPI(title="Instant Football XGBoost API")
-
-
-class OddsInput(BaseModel):
-    home: float
-    draw: float
-    away: float
-
-
-class OverUnderInput(BaseModel):
-    line: Optional[float] = None
-    over: Optional[float] = None
-    under: Optional[float] = None
+app = FastAPI(title="Virtual Odds XGBoost Inference API")
 
 
 class MatchInput(BaseModel):
@@ -41,8 +20,8 @@ class MatchInput(BaseModel):
     away: str
     home_stars: Optional[float] = 3.0
     away_stars: Optional[float] = 3.0
-    odds: OddsInput
-    over_under: Optional[OverUnderInput] = None
+    odds: Dict[str, float]
+    over_under: Optional[Dict[str, Any]] = None
     home_profile: Optional[Dict[str, Any]] = None
     away_profile: Optional[Dict[str, Any]] = None
 
@@ -51,138 +30,172 @@ class PredictRequest(BaseModel):
     matches: List[MatchInput]
 
 
-def _pick_num(prof: Optional[Dict[str, Any]], keys: List[str]) -> float:
-    if not isinstance(prof, dict):
-        return np.nan
-    for k in keys:
-        v = prof.get(k)
-        if v is not None and v != "":
-            try:
-                f = float(v)
-                if not np.isnan(f):
-                    return f
-            except (TypeError, ValueError):
-                pass
-    return np.nan
+def _log_odds_margin(probs_3col: np.ndarray) -> np.ndarray:
+    p = np.asarray(probs_3col, dtype=float).copy()
+    bad = ~np.isfinite(p) | (p <= 1e-6)
+    p[bad] = 1.0 / 3.0
+    p = p / p.sum(axis=1, keepdims=True)
+    return np.log(np.clip(p, 1e-6, 1.0))
 
 
-def _build_rows(matches: List[MatchInput]) -> pd.DataFrame:
+def _blend_1x2(p_xgb: np.ndarray, p_book: np.ndarray, alpha: float) -> np.ndarray:
+    out = p_xgb.copy()
+    valid = ~np.isnan(p_book).any(axis=1)
+    if np.any(valid):
+        blended = alpha * p_xgb[valid] + (1.0 - alpha) * p_book[valid]
+        row_sum = blended.sum(axis=1, keepdims=True)
+        out[valid] = np.where(row_sum > 0, blended / row_sum, p_xgb[valid])
+    return out
+
+
+def _blend_binary(p_xgb: np.ndarray, p_book: np.ndarray, alpha: float) -> np.ndarray:
+    out = p_xgb.copy()
+    valid = ~np.isnan(p_book)
+    if np.any(valid):
+        out[valid] = alpha * p_xgb[valid] + (1.0 - alpha) * p_book[valid]
+    return np.clip(out, 0.0, 1.0)
+
+
+def _load_bundle():
+    if not os.path.exists(ARTIFACT_PATH):
+        raise RuntimeError(f"Model artifact not found at {ARTIFACT_PATH}")
+    bundle = joblib.load(ARTIFACT_PATH)
+    models = bundle.get("models", {})
+    x1x2_feats = bundle.get("1x2_features") or bundle.get("features") or list(FEATURES)
+    ou_feats = bundle.get("ou_features") or x1x2_feats
+    blend_alphas = bundle.get("blend_alphas") or {
+        "1x2": bundle.get("blend_alpha", 0.25),
+        "ou_1.5": 0.35,
+        "ou_2.5": 0.35,
+        "ou_3.5": 0.35,
+    }
+    draw_mult = float(bundle.get("draw_mult", 0.85))
+    return models, x1x2_feats, ou_feats, blend_alphas, draw_mult
+
+
+MODELS, X1X2_FEATS, OU_FEATS, BLEND_ALPHAS, DRAW_MULT = _load_bundle()
+
+
+def _matches_to_feature_df(matches: List[MatchInput]) -> pd.DataFrame:
     rows = []
-    for m in matches:
-        lg = (m.league or "Spain").strip()
-        hs = float(m.home_stars) if m.home_stars is not None else np.nan
-        as_ = float(m.away_stars) if m.away_stars is not None else np.nan
-        oh, od, oa = float(m.odds.home), float(m.odds.draw), float(m.odds.away)
-
-        raw_h = 1.0 / oh if oh > 1.0 else np.nan
-        raw_d = 1.0 / od if od > 1.0 else np.nan
-        raw_a = 1.0 / oa if oa > 1.0 else np.nan
-        tot = (
-            np.nansum([raw_h, raw_d, raw_a])
-            if not any(np.isnan([raw_h, raw_d, raw_a]))
-            else np.nan
-        )
-
-        imp_h = (raw_h / tot) if (tot and not np.isnan(tot)) else np.nan
-        imp_d = (raw_d / tot) if (tot and not np.isnan(tot)) else np.nan
-        imp_a = (raw_a / tot) if (tot and not np.isnan(tot)) else np.nan
+    for idx, m in enumerate(matches):
+        hp = m.home_profile or {}
+        ap = m.away_profile or {}
+        ou = m.over_under or {}
+        line_key = str(ou.get("line", "2.5")).replace(".", "")
 
         row: Dict[str, Any] = {
-            "league": lg,
-            "league_spain": 1 if lg.lower() == "spain" else 0,
-            "home_stars": hs,
-            "away_stars": as_,
-            "star_diff": hs - as_ if not (np.isnan(hs) or np.isnan(as_)) else np.nan,
-            "star_sum": hs + as_ if not (np.isnan(hs) or np.isnan(as_)) else np.nan,
-            "odds_home": oh,
-            "odds_draw": od,
-            "odds_away": oa,
-            "vig_1x2": (tot - 1.0) if not np.isnan(tot) else np.nan,
-            "imp_home": imp_h,
-            "imp_draw": imp_d,
-            "imp_away": imp_a,
-            "imp_home_away_diff": (
-                (imp_h - imp_a) if not (np.isnan(imp_h) or np.isnan(imp_a)) else np.nan
-            ),
-            "slope_15_25": np.nan,
-            "slope_25_35": np.nan,
-            "imp_gg": np.nan,
+            "id": idx,
+            "round_no": int(hp.get("round_no") or ap.get("round_no") or 9999),
+            "league": m.league or "Spain",
+            "home_team": m.home,
+            "away_team": m.away,
+            "home_stars": m.home_stars if m.home_stars is not None else 3.0,
+            "away_stars": m.away_stars if m.away_stars is not None else 3.0,
+            "home_score": np.nan,
+            "away_score": np.nan,
+            "odds_home": m.odds.get("home"),
+            "odds_draw": m.odds.get("draw"),
+            "odds_away": m.odds.get("away"),
+            "home_roll5_gf": hp.get("home_gf_ma5", hp.get("gf_ma5", np.nan)),
+            "home_roll5_ga": hp.get("home_ga_ma5", hp.get("ga_ma5", np.nan)),
+            "home_roll5_pts": hp.get("pts_ma5", np.nan),
+            "home_roll5_gd": hp.get("gd_ma5", np.nan),
+            "away_roll5_gf": ap.get("away_gf_ma5", ap.get("gf_ma5", np.nan)),
+            "away_roll5_ga": ap.get("away_ga_ma5", ap.get("ga_ma5", np.nan)),
+            "away_roll5_pts": ap.get("pts_ma5", np.nan),
+            "away_roll5_gd": ap.get("gd_ma5", np.nan),
         }
-
-        for l in OU_LINES:
-            row[f"imp_over_{l}"] = np.nan
-
-        if m.over_under and m.over_under.over and m.over_under.under:
-            oo, ou = float(m.over_under.over), float(m.over_under.under)
-            if oo > 1.0 and ou > 1.0:
-                ro, ru = 1.0 / oo, 1.0 / ou
-                p_over = ro / (ro + ru)
-                line_str = str(m.over_under.line or "")
-                tag_map = {
-                    "0.5": "05",
-                    "1.5": "15",
-                    "2.5": "25",
-                    "3.5": "35",
-                    "4.5": "45",
-                    "5.5": "55",
-                }
-                tag = tag_map.get(line_str)
-                if tag:
-                    row[f"imp_over_{tag}"] = p_over
-
-        for side, prof in (("home", m.home_profile), ("away", m.away_profile)):
-            row[f"{side}_roll5_gf"] = _pick_num(
-                prof, [f"{side}_roll5_gf", f"{side}_gf_ma5", "roll5_gf", "gf_ma5", "avg_gf"]
-            )
-            row[f"{side}_roll5_ga"] = _pick_num(
-                prof, [f"{side}_roll5_ga", f"{side}_ga_ma5", "roll5_ga", "ga_ma5", "avg_ga"]
-            )
-            row[f"{side}_roll5_pts"] = _pick_num(
-                prof, [f"{side}_roll5_pts", f"{side}_pts_ma5", "roll5_pts", "pts_ma5", "avg_pts"]
-            )
-
-        row["roll5_gf_diff"] = row["home_roll5_gf"] - row["away_roll5_gf"]
-        row["roll5_ga_diff"] = row["home_roll5_ga"] - row["away_roll5_ga"]
-        row["roll5_pts_diff"] = row["home_roll5_pts"] - row["away_roll5_pts"]
+        if line_key in ("05", "15", "25", "35", "45", "55"):
+            row[f"odds_over_{line_key}"] = ou.get("over")
+            row[f"odds_under_{line_key}"] = ou.get("under")
         rows.append(row)
 
-    df = pd.DataFrame(rows)
-    for col in feat_cols:
-        if col not in df.columns:
-            df[col] = np.nan
-    return df[feat_cols]
+    raw_df = pd.DataFrame(rows)
+    feat_df = build_features(raw_df)
+    return feat_df.sort_values("id").reset_index(drop=True)
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "features": len(feat_cols)}
+    return {
+        "status": "ok",
+        "artifact": ARTIFACT_PATH,
+        "blend_alphas": BLEND_ALPHAS,
+        "draw_mult": DRAW_MULT,
+    }
 
 
 @app.post("/predict")
 def predict(req: PredictRequest):
     if not req.matches:
-        raise HTTPException(status_code=400, detail="No matches provided")
-    X = _build_rows(req.matches)
-    probs_1x2 = models["1x2"].predict_proba(X)
-    pick_map = {0: "1", 1: "X", 2: "2"}
+        raise HTTPException(status_code=400, detail="No matches provided.")
 
-    ou_15 = models["ou_1.5"].predict_proba(X)[:, 1] * 100.0
-    ou_25 = models["ou_2.5"].predict_proba(X)[:, 1] * 100.0
-    ou_35 = models["ou_3.5"].predict_proba(X)[:, 1] * 100.0
+    m1x2 = MODELS.get("1x2")
+    if m1x2 is None:
+        raise HTTPException(status_code=500, detail="1X2 model missing from artifact.")
 
-    results = []
-    for i in range(len(req.matches)):
-        p = probs_1x2[i] * 100.0
-        best_idx = int(np.argmax(p))
-        results.append({
-            "probs": [round(float(p[0]), 1), round(float(p[1]), 1), round(float(p[2]), 1)],
-            "pick": pick_map[best_idx],
-            "confidence": round(float(p[best_idx]), 1),
-            "over_15_pct": round(float(ou_15[i]), 1),
-            "under_15_pct": round(float(100.0 - ou_15[i]), 1),
-            "over_25_pct": round(float(ou_25[i]), 1),
-            "under_25_pct": round(float(100.0 - ou_25[i]), 1),
-            "over_35_pct": round(float(ou_35[i]), 1),
-            "under_35_pct": round(float(100.0 - ou_35[i]), 1),
-        })
-    return {"predictions": results}
+    df = _matches_to_feature_df(req.matches)
+    for col in set(X1X2_FEATS) | set(OU_FEATS):
+        if col not in df.columns:
+            df[col] = np.nan
+
+    imp_1x2 = df[["imp_home", "imp_draw", "imp_away"]].to_numpy(dtype=float)
+    margin = _log_odds_margin(imp_1x2)
+
+    X_1x2 = df[X1X2_FEATS]
+    try:
+        p_xgb = m1x2.predict_proba(X_1x2, base_margin=margin)
+    except TypeError:
+        p_xgb = m1x2.predict_proba(X_1x2)
+
+    a_1x2 = float(BLEND_ALPHAS.get("1x2", 0.25))
+    p_final = _blend_1x2(p_xgb, imp_1x2, a_1x2)
+
+    adj_picks = p_final.copy()
+    adj_picks[:, 1] = adj_picks[:, 1] * DRAW_MULT
+    pick_indices = adj_picks.argmax(axis=1)
+    pick_labels = ["1", "X", "2"]
+
+    ou_probs: Dict[str, Optional[np.ndarray]] = {}
+    for k in OU_TARGETS:
+        tag = k.replace(".", "")
+        key = f"ou_{k}"
+        m_ou = MODELS.get(key)
+        if m_ou is not None:
+            po_xgb = m_ou.predict_proba(df[OU_FEATS])[:, 1]
+            imp_ou = df[f"imp_over_{tag}"].to_numpy(dtype=float) if f"imp_over_{tag}" in df.columns else np.full(len(df), np.nan)
+            a_ou = float(BLEND_ALPHAS.get(key, 0.35))
+            ou_probs[k] = _blend_binary(po_xgb, imp_ou, a_ou) * 100.0
+        else:
+            ou_probs[k] = None
+
+    predictions = []
+    for i in range(len(df)):
+        h_pct = float(p_final[i, 0] * 100.0)
+        d_pct = float(p_final[i, 1] * 100.0)
+        a_pct = float(p_final[i, 2] * 100.0)
+        pick_code = pick_labels[int(pick_indices[i])]
+        conf = max(h_pct, d_pct, a_pct)
+
+        item: Dict[str, Any] = {
+            "home_win_pct": round(h_pct, 2),
+            "draw_pct": round(d_pct, 2),
+            "away_win_pct": round(a_pct, 2),
+            "probs": [round(h_pct, 2), round(d_pct, 2), round(a_pct, 2)],
+            "pick_1x2": pick_code,
+            "confidence": round(conf, 2),
+        }
+
+        for k in ("1.5", "2.5", "3.5"):
+            arr = ou_probs.get(k)
+            if arr is not None and np.isfinite(arr[i]):
+                over_v = float(np.clip(arr[i], 0.0, 100.0))
+                under_v = float(np.clip(100.0 - over_v, 0.0, 100.0))
+                tag = k.replace(".", "_")
+                item[f"over_{tag}_pct"] = round(over_v, 2)
+                item[f"under_{tag}_pct"] = round(under_v, 2)
+
+        predictions.append(item)
+
+    return {"predictions": predictions}
