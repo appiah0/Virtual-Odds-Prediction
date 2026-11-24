@@ -23,6 +23,8 @@ FEATURES = (
         "star_sum",
         "star_share_home",
         "star_odds_gap_home",
+        "star_vs_imp_home",
+        "star_vs_imp_away",
         "odds_home",
         "odds_draw",
         "odds_away",
@@ -33,11 +35,12 @@ FEATURES = (
         "imp_home_away_diff",
         "imp_fav_max",
         "imp_fav_underdog_gap",
+        "imp_fav_vs_draw",
     ]
     + [f"imp_over_{l}" for l in OU_LINES]
     + ["slope_15_25", "slope_25_35", "imp_gg", "imp_1x", "imp_12", "imp_2x"]
     + [f"{side}_roll5_{m}" for side in ("home", "away") for m in ("gf", "ga", "pts", "gd")]
-    + ["roll5_gf_diff", "roll5_ga_diff", "roll5_pts_diff", "roll5_gd_diff"]
+    + ["roll5_gf_diff", "roll5_ga_diff", "roll5_pts_diff", "roll5_gd_diff", "roll5_net_gd_diff"]
 )
 
 OU_TARGETS = {"1.5": 2, "2.5": 3, "3.5": 4}  # over if total goals >= threshold
@@ -89,6 +92,9 @@ def build_features(df):
     df["star_share_home"] = np.where(
         df["star_sum"] > 0, df["home_stars"] / df["star_sum"], np.nan
     )
+    away_share = np.where(
+        df["star_sum"] > 0, df["away_stars"] / df["star_sum"], np.nan
+    )
 
     # 1X2 vig-free probabilities
     o = df[["odds_home", "odds_draw", "odds_away"]].where(lambda x: x > 1.0)
@@ -100,10 +106,13 @@ def build_features(df):
     df["imp_away"] = raw["odds_away"] / tot
     df["imp_home_away_diff"] = df["imp_home"] - df["imp_away"]
     df["star_odds_gap_home"] = df["star_share_home"] - df["imp_home"]
+    df["star_vs_imp_home"] = df["star_share_home"] - df["imp_home"]
+    df["star_vs_imp_away"] = away_share - df["imp_away"]
 
     imp_1x2_arr = df[["imp_home", "imp_draw", "imp_away"]].to_numpy()
     df["imp_fav_max"] = np.nanmax(imp_1x2_arr, axis=1)
     df["imp_fav_underdog_gap"] = np.nanmax(imp_1x2_arr, axis=1) - np.nanmin(imp_1x2_arr, axis=1)
+    df["imp_fav_vs_draw"] = np.nanmax(imp_1x2_arr, axis=1) - df["imp_draw"]
 
     # Over/Under vig-free probabilities (NaN preserved for XGBoost)
     for l in OU_LINES:
@@ -149,6 +158,10 @@ def build_features(df):
             df[f"{tag}_roll5_{m}"] = sub[f"roll5_{m}"].reindex(df.index)
     for m in ("gf", "ga", "pts", "gd"):
         df[f"roll5_{m}_diff"] = df[f"home_roll5_{m}"] - df[f"away_roll5_{m}"]
+    df["roll5_net_gd_diff"] = (
+        (df["home_roll5_gf"] - df["home_roll5_ga"])
+        - (df["away_roll5_gf"] - df["away_roll5_ga"])
+    )
     return df
 
 
