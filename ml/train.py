@@ -86,6 +86,7 @@ BASE_OU = dict(
     n_jobs=-1,
 )
 
+BASE = BASE_1X2
 
 def _log_odds_margin(probs_3col):
     p = np.asarray(probs_3col, dtype=float).copy()
