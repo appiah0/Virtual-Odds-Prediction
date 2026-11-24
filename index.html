@@ -828,9 +828,10 @@ V.predict = u => {
       ${P.dataUrl ? '<button data-action="clearimg" class="btn btn-ghost w-full mt-2 !py-3 text-sm">Remove screenshot</button>' : ''}</div>`;
   } else if (P.step === 'result') {
     const avg = P.avgConfidence == null ? '-' : Number(P.avgConfidence).toFixed(1);
+    const readCount = Array.isArray(P.result) ? P.result.length : P.found;
     body = `<div class="wrap mt-6 space-y-3">
-      <div class="flex items-center justify-between gap-2"><h2 class="font-display font-bold text-xl">Your readings</h2><span class="chip text-xs">${esc(P.tier.name)} &middot; ${P.found} fixtures read</span></div>
-      ${P.result.map(m => matchCard(m, P.resultKind === 'diamonds')).join('')}
+      <div class="flex items-center justify-between gap-2"><h2 class="font-display font-bold text-xl">Your readings</h2><span class="chip text-xs">${esc(P.tier.name)} &middot; ${readCount} fixture${readCount === 1 ? '' : 's'} read</span></div>
+    ${P.result.map(m => matchCard(m, P.resultKind === 'diamonds')).join('')}
       <div class="card p-4 flex items-center gap-3"><div class="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic('trending-up')}</div><div><div class="text-[11px] font-extrabold tracking-wider text-[var(--mute)]">AVG CONFIDENCE</div><div class="font-display font-bold text-xl">${avg}%</div></div></div>
       <div class="card p-4 flex items-center gap-3"><div class="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center flex-none">${ic('ticket')}</div><div class="flex-1"><div class="text-[11px] font-extrabold tracking-wider text-[var(--mute)]">READING REFERENCE</div><div class="font-display font-bold text-xl text-purple-800">${esc(P.reference)}</div></div><button data-action="copycode" class="chip font-bold">${ic('copy')} Copy</button></div>
       <button data-action="copyslip" class="btn btn-green w-full">${ic('clipboard-copy')} Copy reading summary</button>
