@@ -59,9 +59,9 @@ X1X2_FEATURES = [c for c in PREFERRED_1X2 if c in FEATURES] or list(FEATURES)
 OU_FEATURES = [c for c in FEATURES if c in PREFERRED_1X2] or list(FEATURES)
 
 BASE_1X2 = dict(
-    n_estimators=160,
+    n_estimators=120,
     max_depth=2,
-    learning_rate=0.015,
+    learning_rate=0.01,
     subsample=0.75,
     colsample_bytree=0.6,
     min_child_weight=30,
