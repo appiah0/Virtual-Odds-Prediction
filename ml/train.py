@@ -10,7 +10,11 @@ from features import FEATURES, OU_TARGETS, add_targets, build_features, fetch_fi
 
 ARTIFACT = "instant_football_xgb.joblib"
 SEED = 42
-MIN_EDGE = 0.04  # 4 percentage points above bookmaker implied probability
+MIN_EDGE = 0.04  # fallback default edge threshold (4 percentage points)
+
+ALPHA_CANDIDATES = [0.0, 0.15, 0.25, 0.35, 0.5]
+EDGE_CANDIDATES = [0.02, 0.04, 0.06, 0.08, 0.10]
+MIN_FILTERED_SAMPLES = 150
 
 BLEND_ALPHAS = {
     "1x2": 0.35,
@@ -120,6 +124,36 @@ def _blend_binary(p_xgb, p_book, alpha):
     return np.clip(out, 0.0, 1.0)
 
 
+def _sweep_1x2_blend_and_edge(p_xgb, b_book, y_true):
+    results = []
+    for alpha in ALPHA_CANDIDATES:
+        p_bl = _blend_1x2(p_xgb, b_book, alpha)
+        picks = p_bl.argmax(axis=1)
+        all_acc = float(accuracy_score(y_true, picks))
+        all_ll = float(log_loss(y_true, p_bl, labels=[0, 1, 2]))
+        edges = np.max(p_bl - b_book, axis=1)
+
+        for edge_thr in EDGE_CANDIDATES:
+            mask = edges >= edge_thr
+            n = int(mask.sum())
+            acc = float(accuracy_score(y_true[mask], picks[mask])) if n > 0 else np.nan
+            results.append(
+                {
+                    "alpha": float(alpha),
+                    "edge_thr": float(edge_thr),
+                    "n": n,
+                    "filtered_acc": acc,
+                    "all_acc": all_acc,
+                    "all_logloss": all_ll,
+                }
+            )
+
+    eligible = [r for r in results if r["n"] >= MIN_FILTERED_SAMPLES and not np.isnan(r["filtered_acc"])]
+    pool = eligible if eligible else [r for r in results if r["n"] > 0]
+    best = max(pool, key=lambda r: (r["filtered_acc"], r["n"]))
+    return results, best
+
+
 def main():
     raw = fetch_fixtures(get_client(), settled=True)
     print(f"Fetched {len(raw)} settled rows, {raw['round_no'].nunique()} rounds")
@@ -146,19 +180,25 @@ def main():
     p = _predict_1x2_with_margin(m1, uses_margin, te[LEAN_FEATURES], margin_te)
     y = te["y_1x2"].astype(int).values
     b = te[["imp_home", "imp_draw", "imp_away"]].values
-    p_blend = _blend_1x2(p, b, a_1x2)
     ok = ~np.isnan(b).any(axis=1)
 
+    sweep_rows, best_cfg = _sweep_1x2_blend_and_edge(p[ok], b[ok], y[ok])
+    best_alpha = best_cfg["alpha"]
+    best_edge = best_cfg["edge_thr"]
+    BLEND_ALPHAS["1x2"] = best_alpha
+
+    p_blend = _blend_1x2(p, b, best_alpha)
     xgb_pick = p[ok].argmax(1)
     blend_pick = p_blend[ok].argmax(1)
     book_pick = b[ok].argmax(1)
     disagree = blend_pick != book_pick
 
     edge_1x2 = np.max(p_blend[ok] - b[ok], axis=1)
-    high_edge = edge_1x2 >= MIN_EDGE
+    high_edge = edge_1x2 >= best_edge
 
     metrics["1x2"] = {
-        "blend_alpha": a_1x2,
+        "blend_alpha": best_alpha,
+        "edge_threshold": best_edge,
         "uses_base_margin": uses_margin,
         "xgb_logloss": float(log_loss(y[ok], p[ok], labels=[0, 1, 2])),
         "blend_logloss": float(log_loss(y[ok], p_blend[ok], labels=[0, 1, 2])),
@@ -171,10 +211,15 @@ def main():
         "disagree_book_acc": float(accuracy_score(y[ok][disagree], book_pick[disagree])) if disagree.any() else None,
         "high_edge_n": int(high_edge.sum()),
         "high_edge_blend_acc": float(accuracy_score(y[ok][high_edge], blend_pick[high_edge])) if high_edge.any() else None,
+        "sweep_top5": sorted(
+            [r for r in sweep_rows if r["n"] >= MIN_FILTERED_SAMPLES and not np.isnan(r["filtered_acc"])],
+            key=lambda r: (r["filtered_acc"], r["n"]),
+            reverse=True,
+        )[:5],
     }
     models["1x2"] = m1
     r = metrics["1x2"]
-    print(f"=== 1X2 (out-of-sample, alpha={a_1x2:.2f}) ===")
+    print(f"=== 1X2 (out-of-sample, best alpha={best_alpha:.2f}, best edge>={best_edge:.0%}) ===")
     print(f"Log-loss  XGB {r['xgb_logloss']:.4f} | Blend {r['blend_logloss']:.4f} | Bookmaker {r['book_logloss']:.4f}")
     print(f"Top-pick accuracy  XGB {r['xgb_acc']:.3%} | Blend {r['blend_acc']:.3%} | Bookmaker {r['book_acc']:.3%}")
     if r["disagree_n"] > 0:
@@ -183,9 +228,14 @@ def main():
             f"Blend {r['disagree_blend_acc']:.3%} | Bookmaker {r['disagree_book_acc']:.3%}"
         )
     if r["high_edge_n"] > 0:
-        print(f"Edge >= {MIN_EDGE:.0%} (n={r['high_edge_n']}): Blend acc {r['high_edge_blend_acc']:.3%}\n")
-    else:
-        print()
+        print(f"Edge >= {best_edge:.0%} (n={r['high_edge_n']}): Blend acc {r['high_edge_blend_acc']:.3%}")
+    print("Top sweep configs (min n =", MIN_FILTERED_SAMPLES, "):")
+    for row in r["sweep_top5"]:
+        print(
+            f"  alpha={row['alpha']:.2f}, edge>={row['edge_thr']:.0%} -> "
+            f"filtered_acc={row['filtered_acc']:.3%} (n={row['n']}), all_acc={row['all_acc']:.3%}, ll={row['all_logloss']:.4f}"
+        )
+    print()
 
     # ---- Model 2: Over/Under ----
     for k in OU_TARGETS:
@@ -224,7 +274,8 @@ def main():
         {
             "models": models,
             "features": LEAN_FEATURES,
-            "blend_alpha": a_1x2,
+            "blend_alpha": best_alpha,
+            "edge_threshold": best_edge,
             "blend_alphas": BLEND_ALPHAS,
             "metrics": metrics,
             "test_start_round": int(cut),
