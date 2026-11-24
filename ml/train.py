@@ -10,24 +10,24 @@ from features import FEATURES, OU_TARGETS, add_targets, build_features, fetch_fi
 
 ARTIFACT = "instant_football_xgb.joblib"
 SEED = 42
-MIN_EDGE = 0.04  # fallback default edge threshold (4 percentage points)
-
-ALPHA_CANDIDATES = [0.0, 0.15, 0.25, 0.35, 0.5]
-EDGE_CANDIDATES = [0.02, 0.04, 0.06, 0.08, 0.10]
-MIN_FILTERED_SAMPLES = 150
+MIN_EDGE = 0.04
+DRAW_MULT = 0.85  # dampens draw probability slightly when comparing 1X2 argmax picks
 
 BLEND_ALPHAS = {
-    "1x2": 0.35,
+    "1x2": 0.25,
     "ou_1.5": 0.35,
     "ou_2.5": 0.35,
     "ou_3.5": 0.35,
 }
 
-PREFERRED_LEAN = [
+PREFERRED_1X2 = [
     "league_spain",
     "home_stars",
     "away_stars",
     "star_diff",
+    "star_share_home",
+    "star_vs_imp_home",
+    "star_vs_imp_away",
     "odds_home",
     "odds_draw",
     "odds_away",
@@ -36,7 +36,9 @@ PREFERRED_LEAN = [
     "imp_away",
     "vig_1x2",
     "imp_home_away_diff",
-    "imp_over_05",
+    "imp_fav_max",
+    "imp_fav_underdog_gap",
+    "imp_fav_vs_draw",
     "imp_over_15",
     "imp_over_25",
     "imp_over_35",
@@ -45,14 +47,32 @@ PREFERRED_LEAN = [
     "imp_gg",
     "home_roll5_gf",
     "home_roll5_ga",
+    "home_roll5_pts",
     "away_roll5_gf",
     "away_roll5_ga",
+    "away_roll5_pts",
     "roll5_pts_diff",
+    "roll5_net_gd_diff",
 ]
 
-LEAN_FEATURES = [c for c in PREFERRED_LEAN if c in FEATURES] or list(FEATURES)
+X1X2_FEATURES = [c for c in PREFERRED_1X2 if c in FEATURES] or list(FEATURES)
+OU_FEATURES = [c for c in FEATURES if c in PREFERRED_1X2] or list(FEATURES)
 
-BASE = dict(
+BASE_1X2 = dict(
+    n_estimators=180,
+    max_depth=2,
+    learning_rate=0.02,
+    subsample=0.75,
+    colsample_bytree=0.7,
+    min_child_weight=25,
+    reg_alpha=2.0,
+    reg_lambda=10.0,
+    tree_method="hist",
+    random_state=SEED,
+    n_jobs=-1,
+)
+
+BASE_OU = dict(
     n_estimators=220,
     max_depth=2,
     learning_rate=0.02,
@@ -75,26 +95,10 @@ def _log_odds_margin(probs_3col):
     return np.log(np.clip(p, 1e-6, 1.0))
 
 
-def _fit_1x2_with_margin(X_tr, y_tr, margin_tr):
-    est = XGBClassifier(
-        objective="multi:softprob",
-        num_class=3,
-        eval_metric="mlogloss",
-        **BASE,
-    )
-    try:
-        cal = CalibratedClassifierCV(est, method="sigmoid", cv=TimeSeriesSplit(n_splits=5))
-        cal.fit(X_tr, y_tr, base_margin=margin_tr)
-        return cal, True
-    except TypeError:
-        est.fit(X_tr, y_tr, base_margin=margin_tr)
-        return est, False
-
-
-def _predict_1x2_with_margin(model, uses_margin, X_te, margin_te):
-    if not uses_margin:
-        return model.predict_proba(X_te, base_margin=margin_te)
-    return model.predict_proba(X_te)
+def _weighted_argmax_1x2(probs, draw_mult=1.0):
+    adj = np.asarray(probs, dtype=float).copy()
+    adj[:, 1] = adj[:, 1] * draw_mult
+    return adj.argmax(axis=1)
 
 
 def calibrated(estimator):
@@ -124,42 +128,12 @@ def _blend_binary(p_xgb, p_book, alpha):
     return np.clip(out, 0.0, 1.0)
 
 
-def _sweep_1x2_blend_and_edge(p_xgb, b_book, y_true):
-    results = []
-    for alpha in ALPHA_CANDIDATES:
-        p_bl = _blend_1x2(p_xgb, b_book, alpha)
-        picks = p_bl.argmax(axis=1)
-        all_acc = float(accuracy_score(y_true, picks))
-        all_ll = float(log_loss(y_true, p_bl, labels=[0, 1, 2]))
-        edges = np.max(p_bl - b_book, axis=1)
-
-        for edge_thr in EDGE_CANDIDATES:
-            mask = edges >= edge_thr
-            n = int(mask.sum())
-            acc = float(accuracy_score(y_true[mask], picks[mask])) if n > 0 else np.nan
-            results.append(
-                {
-                    "alpha": float(alpha),
-                    "edge_thr": float(edge_thr),
-                    "n": n,
-                    "filtered_acc": acc,
-                    "all_acc": all_acc,
-                    "all_logloss": all_ll,
-                }
-            )
-
-    eligible = [r for r in results if r["n"] >= MIN_FILTERED_SAMPLES and not np.isnan(r["filtered_acc"])]
-    pool = eligible if eligible else [r for r in results if r["n"] > 0]
-    best = max(pool, key=lambda r: (r["filtered_acc"], r["n"]))
-    return results, best
-
-
 def main():
     raw = fetch_fixtures(get_client(), settled=True)
     print(f"Fetched {len(raw)} settled rows, {raw['round_no'].nunique()} rounds")
     df = add_targets(build_features(raw))
     df = df[df["y_1x2"].notna()].reset_index(drop=True)
-    print(f"Using {len(LEAN_FEATURES)}/{len(FEATURES)} lean features | alphas={BLEND_ALPHAS}")
+    print(f"1X2 features: {len(X1X2_FEATURES)}/{len(FEATURES)} | draw_mult={DRAW_MULT}")
 
     rounds = np.sort(df["round_no"].unique())
     cut = rounds[int(len(rounds) * 0.8)]
@@ -168,74 +142,86 @@ def main():
 
     models, metrics = {}, {}
 
-    # ---- Model 1: 1X2 (anchored to bookmaker log-odds margin) ----
+    # ---- Model 1: Raw vs Calibrated 1X2 with log-odds base_margin ----
     a_1x2 = BLEND_ALPHAS["1x2"]
     margin_tr = _log_odds_margin(tr[["imp_home", "imp_draw", "imp_away"]].values)
     margin_te = _log_odds_margin(te[["imp_home", "imp_draw", "imp_away"]].values)
 
-    m1, uses_margin = _fit_1x2_with_margin(
-        tr[LEAN_FEATURES], tr["y_1x2"].astype(int).values, margin_tr
+    raw_xgb = XGBClassifier(
+        objective="multi:softprob",
+        num_class=3,
+        eval_metric="mlogloss",
+        **BASE_1X2,
     )
+    raw_xgb.fit(
+        tr[X1X2_FEATURES],
+        tr["y_1x2"].astype(int).values,
+        base_margin=margin_tr,
+    )
+    p_raw = raw_xgb.predict_proba(te[X1X2_FEATURES], base_margin=margin_te)
 
-    p = _predict_1x2_with_margin(m1, uses_margin, te[LEAN_FEATURES], margin_te)
+    cal_xgb = calibrated(
+        XGBClassifier(
+            objective="multi:softprob",
+            num_class=3,
+            eval_metric="mlogloss",
+            **BASE_1X2,
+        )
+    )
+    try:
+        cal_xgb.fit(tr[X1X2_FEATURES], tr["y_1x2"].astype(int).values, base_margin=margin_tr)
+        p_cal = cal_xgb.predict_proba(te[X1X2_FEATURES])
+    except TypeError:
+        cal_xgb.fit(tr[X1X2_FEATURES], tr["y_1x2"].astype(int).values)
+        p_cal = cal_xgb.predict_proba(te[X1X2_FEATURES])
+
     y = te["y_1x2"].astype(int).values
     b = te[["imp_home", "imp_draw", "imp_away"]].values
     ok = ~np.isnan(b).any(axis=1)
 
-    sweep_rows, best_cfg = _sweep_1x2_blend_and_edge(p[ok], b[ok], y[ok])
-    best_alpha = best_cfg["alpha"]
-    best_edge = best_cfg["edge_thr"]
-    BLEND_ALPHAS["1x2"] = best_alpha
-
-    p_blend = _blend_1x2(p, b, best_alpha)
-    xgb_pick = p[ok].argmax(1)
+    p_blend = _blend_1x2(p_raw, b, a_1x2)
+    raw_pick = p_raw[ok].argmax(1)
+    raw_adj_pick = _weighted_argmax_1x2(p_raw[ok], DRAW_MULT)
+    cal_pick = p_cal[ok].argmax(1)
     blend_pick = p_blend[ok].argmax(1)
     book_pick = b[ok].argmax(1)
-    disagree = blend_pick != book_pick
 
+    disagree = raw_pick != book_pick
     edge_1x2 = np.max(p_blend[ok] - b[ok], axis=1)
-    high_edge = edge_1x2 >= best_edge
+    high_edge = edge_1x2 >= MIN_EDGE
 
     metrics["1x2"] = {
-        "blend_alpha": best_alpha,
-        "edge_threshold": best_edge,
-        "uses_base_margin": uses_margin,
-        "xgb_logloss": float(log_loss(y[ok], p[ok], labels=[0, 1, 2])),
-        "blend_logloss": float(log_loss(y[ok], p_blend[ok], labels=[0, 1, 2])),
+        "blend_alpha": a_1x2,
+        "draw_mult": DRAW_MULT,
+        "xgb_raw_logloss": float(log_loss(y[ok], p_raw[ok], labels=[0, 1, 2])),
+        "xgb_cal_logloss": float(log_loss(y[ok], p_cal[ok], labels=[0, 1, 2])),
         "book_logloss": float(log_loss(y[ok], b[ok], labels=[0, 1, 2])),
-        "xgb_acc": float(accuracy_score(y[ok], xgb_pick)),
+        "xgb_acc": float(accuracy_score(y[ok], raw_pick)),
+        "xgb_adj_acc": float(accuracy_score(y[ok], raw_adj_pick)),
+        "xgb_cal_acc": float(accuracy_score(y[ok], cal_pick)),
         "blend_acc": float(accuracy_score(y[ok], blend_pick)),
         "book_acc": float(accuracy_score(y[ok], book_pick)),
         "disagree_n": int(disagree.sum()),
-        "disagree_blend_acc": float(accuracy_score(y[ok][disagree], blend_pick[disagree])) if disagree.any() else None,
+        "disagree_xgb_acc": float(accuracy_score(y[ok][disagree], raw_pick[disagree])) if disagree.any() else None,
         "disagree_book_acc": float(accuracy_score(y[ok][disagree], book_pick[disagree])) if disagree.any() else None,
         "high_edge_n": int(high_edge.sum()),
         "high_edge_blend_acc": float(accuracy_score(y[ok][high_edge], blend_pick[high_edge])) if high_edge.any() else None,
-        "sweep_top5": sorted(
-            [r for r in sweep_rows if r["n"] >= MIN_FILTERED_SAMPLES and not np.isnan(r["filtered_acc"])],
-            key=lambda r: (r["filtered_acc"], r["n"]),
-            reverse=True,
-        )[:5],
     }
-    models["1x2"] = m1
+    models["1x2"] = raw_xgb
+    models["1x2_cal"] = cal_xgb
     r = metrics["1x2"]
-    print(f"=== 1X2 (out-of-sample, best alpha={best_alpha:.2f}, best edge>={best_edge:.0%}) ===")
-    print(f"Log-loss  XGB {r['xgb_logloss']:.4f} | Blend {r['blend_logloss']:.4f} | Bookmaker {r['book_logloss']:.4f}")
-    print(f"Top-pick accuracy  XGB {r['xgb_acc']:.3%} | Blend {r['blend_acc']:.3%} | Bookmaker {r['book_acc']:.3%}")
+    print("=== 1X2 (out-of-sample) ===")
+    print(f"Log-loss  XGB-Raw {r['xgb_raw_logloss']:.4f} | XGB-Cal {r['xgb_cal_logloss']:.4f} | Bookmaker {r['book_logloss']:.4f}")
+    print(
+        f"Top-pick acc  XGB-Raw {r['xgb_acc']:.3%} | XGB-DrawAdj({DRAW_MULT}) {r['xgb_adj_acc']:.3%} | "
+        f"XGB-Cal {r['xgb_cal_acc']:.3%} | Blend({a_1x2:.2f}) {r['blend_acc']:.3%} | Bookmaker {r['book_acc']:.3%}"
+    )
     if r["disagree_n"] > 0:
-        print(
-            f"Disagreements (n={r['disagree_n']}): "
-            f"Blend {r['disagree_blend_acc']:.3%} | Bookmaker {r['disagree_book_acc']:.3%}"
-        )
+        print(f"Disagreements (n={r['disagree_n']}): XGB-Raw {r['disagree_xgb_acc']:.3%} | Bookmaker {r['disagree_book_acc']:.3%}")
     if r["high_edge_n"] > 0:
-        print(f"Edge >= {best_edge:.0%} (n={r['high_edge_n']}): Blend acc {r['high_edge_blend_acc']:.3%}")
-    print("Top sweep configs (min n =", MIN_FILTERED_SAMPLES, "):")
-    for row in r["sweep_top5"]:
-        print(
-            f"  alpha={row['alpha']:.2f}, edge>={row['edge_thr']:.0%} -> "
-            f"filtered_acc={row['filtered_acc']:.3%} (n={row['n']}), all_acc={row['all_acc']:.3%}, ll={row['all_logloss']:.4f}"
-        )
-    print()
+        print(f"Edge >= {MIN_EDGE:.0%} (n={r['high_edge_n']}): Blend acc {r['high_edge_blend_acc']:.3%}\n")
+    else:
+        print()
 
     # ---- Model 2: Over/Under ----
     for k in OU_TARGETS:
@@ -246,10 +232,10 @@ def main():
         tr_sub = tr[tr[target_col].notna()]
         te_sub = te[te[target_col].notna()]
 
-        m = calibrated(XGBClassifier(objective="binary:logistic", eval_metric="logloss", **BASE))
-        m.fit(tr_sub[LEAN_FEATURES], tr_sub[target_col].astype(int))
+        m = calibrated(XGBClassifier(objective="binary:logistic", eval_metric="logloss", **BASE_OU))
+        m.fit(tr_sub[OU_FEATURES], tr_sub[target_col].astype(int))
 
-        po = m.predict_proba(te_sub[LEAN_FEATURES])[:, 1]
+        po = m.predict_proba(te_sub[OU_FEATURES])[:, 1]
         yo = te_sub[target_col].astype(int).values
         bo = te_sub[f"imp_over_{tag}"].values
         po_blend = _blend_binary(po, bo, a_ou)
@@ -273,9 +259,11 @@ def main():
     joblib.dump(
         {
             "models": models,
-            "features": LEAN_FEATURES,
-            "blend_alpha": best_alpha,
-            "edge_threshold": best_edge,
+            "features": X1X2_FEATURES,
+            "1x2_features": X1X2_FEATURES,
+            "ou_features": OU_FEATURES,
+            "blend_alpha": a_1x2,
+            "draw_mult": DRAW_MULT,
             "blend_alphas": BLEND_ALPHAS,
             "metrics": metrics,
             "test_start_round": int(cut),
