@@ -19,11 +19,22 @@ const LEAGUE_WORDS = {
   france: 'France',
   champions: 'Champions',
 };
-const ODDS_RE = /^\d{1,2}[.,]\d{1,2}$/;
+const ODDS_RE = /^(?:\d{1,2}[.,]\d{1,2}|[1-9]\d{2})$/;
 const CODE_RE = /^[A-Z]{3,4}$/;
 const WHITELIST = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:+>-';
 
 let tesseractReady = null;
+
+function parseOddToken(raw) {
+  const s = String(raw ?? '').trim().replace(',', '.');
+  if (/^\d{1,2}\.\d{1,2}$/.test(s)) {
+    return parseFloat(s);
+  }
+  if (/^[1-9]\d{2}$/.test(s)) {
+    return parseInt(s, 10) / 100;
+  }
+  return NaN;
+}
 
 function ensureTesseract() {
   if (window.Tesseract && typeof window.Tesseract.createWorker === 'function') {
@@ -218,7 +229,7 @@ function parseWords(words, color) {
 
   const odds = words
     .filter((k) => ODDS_RE.test(k.t) && k.cy > tab.y)
-    .map((k) => ({ ...k, v: parseFloat(k.t.replace(',', '.')) }))
+    .map((k) => ({ ...k, v: parseOddToken(k.t) }))
     .filter((k) => k.v > 1 && k.v < 100)
     .sort((a, b) => a.cy - b.cy);
   const tol = Math.max(9, median(odds.map((k) => k.h)) * 0.75);
@@ -274,7 +285,7 @@ function parseWords(words, color) {
     const y0 = cy - CFG.STAR_HALF * hc.h;
     const y1 = cy + CFG.STAR_HALF * hc.h;
     const hs = starCount(ctx, 0, y0, midX - 3, y1, hc.h);
-    const as = starCount(ctx, midX + 3, y0, firstX - 4, y1, hc.h);
+    const awayStars = starCount(ctx, midX + 3, y0, firstX - 4, y1, hc.h);
 
     const home = hc.t.toUpperCase();
     const away = ac.t.toUpperCase();
@@ -287,7 +298,7 @@ function parseWords(words, color) {
       home,
       away,
       home_stars: hs,
-      away_stars: as,
+      away_stars: awayStars,
       odds: { home: row.items[0].v, draw: row.items[1].v, away: row.items[2].v },
       over_under: null,
     });
