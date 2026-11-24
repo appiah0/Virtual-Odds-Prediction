@@ -35,7 +35,7 @@ FEATURES = (
         "imp_fav_underdog_gap",
     ]
     + [f"imp_over_{l}" for l in OU_LINES]
-    + ["slope_15_25", "slope_25_35", "imp_gg"]
+    + ["slope_15_25", "slope_25_35", "imp_gg", "imp_1x", "imp_12", "imp_2x"]
     + [f"{side}_roll5_{m}" for side in ("home", "away") for m in ("gf", "ga", "pts", "gd")]
     + ["roll5_gf_diff", "roll5_ga_diff", "roll5_pts_diff", "roll5_gd_diff"]
 )
@@ -111,6 +111,11 @@ def build_features(df):
     df["slope_15_25"] = df["imp_over_15"] - df["imp_over_25"]
     df["slope_25_35"] = df["imp_over_25"] - df["imp_over_35"]
     df["imp_gg"] = _two_way_prob(df["odds_gg"], df["odds_ng"])
+
+    # Double-chance implied probabilities from odds_1x, odds_12, odds_2x
+    for dc_col, out_col in [("odds_1x", "imp_1x"), ("odds_12", "imp_12"), ("odds_2x", "imp_2x")]:
+        dc_odds = df[dc_col].where(df[dc_col] > 1.0)
+        df[out_col] = 1.0 / dc_odds
 
     # Rolling 5-round form per (league, team); shift(1) => current match never leaks
     def side(team_col, gf, ga, tag):
