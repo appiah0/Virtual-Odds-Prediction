@@ -1,5 +1,5 @@
 // scanner.js v2 — Two-pass Tesseract OCR + margin checksum + star rating reader.
-import { createWorker } from 'tesseract.js';
+import { createWorker } from 'https://esm.sh/tesseract.js@5.1.1';
 
 export const CFG = {
   MAX_W: 1000,
