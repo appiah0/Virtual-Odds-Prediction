@@ -35,8 +35,34 @@ const freeCanvas = (c) => {
   }
 };
 
+async function toImageSource(input) {
+  if (!input) throw new Error('No screenshot image selected.');
+  // Unwrap if an object like { file } or { blob } was passed
+  if (typeof input === 'object' && !(input instanceof Blob) && !(input instanceof HTMLCanvasElement) && !(input instanceof HTMLImageElement) && !(input instanceof ImageBitmap)) {
+    if (input.file) input = input.file;
+    else if (input.blob) input = input.blob;
+    else if (input.files && input.files[0]) input = input.files[0];
+  }
+  if (typeof input === 'string') {
+    if (input.startsWith('data:')) {
+      const res = await fetch(input);
+      return await res.blob();
+    }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = () => reject(new Error('Could not load screenshot image URL.'));
+      img.src = input;
+    });
+    return img;
+  }
+  return input;
+}
+
 async function loadCanvas(file) {
-  const bmp = await createImageBitmap(file);
+  const source = await toImageSource(file);
+  const bmp = await createImageBitmap(source);
   const s = Math.min(1, CFG.MAX_W / bmp.width);
   const c = document.createElement('canvas');
   c.width = Math.round(bmp.width * s);
@@ -45,6 +71,7 @@ async function loadCanvas(file) {
   if (bmp.close) bmp.close();
   return c;
 }
+
 
 function inkify(img) {
   const d = img.data;
